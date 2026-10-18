@@ -4,6 +4,6 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p dist
-rm -f dist/bloom-guard.zip
-zip -9 -q dist/bloom-guard.zip index.html style.css game.js snap-api.js
-ls -l dist/bloom-guard.zip
+rm -f dist/starforge.zip
+zip -9 -q -r dist/starforge.zip index.html style.css game.js snap-api.js fonts
+ls -l dist/starforge.zip
