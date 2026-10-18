@@ -22,13 +22,17 @@ and keep the shield up for as long as you can.
 
 ### Tutorial
 
-- **How to Play**: five animated cards (build, merge, lanes, zap and shop,
-  shield). They open automatically the first time a player taps **PLAY**, and
-  any time from the title screen or the pause menu.
-- **Guided first game**: a hand pointer and a spotlight walk the player
-  through it. Build a turret, build a second, drag one onto the other to
-  merge, then zap aliens in wave 1, then open the shop. The first wave only
-  starts after the first merge. **SKIP** ends the guide at any point.
+The first game is the tutorial: no screens to read, players learn by
+playing. A hand pointer and a spotlight show each step:
+
+1. Build a turret
+2. Build a second one
+3. Drag one onto the other to merge
+4. Zap aliens in wave 1
+5. Open the shop
+
+The first wave only starts after the first merge. **SKIP** ends the guide at
+any point.
 
 Only the five pads behind the shield fire. Turrets of tier 1–3 cover their
 own lane, tiers 4–6 also cover the two neighbouring lanes, and tier 7+ can hit

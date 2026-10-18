@@ -568,7 +568,7 @@
 
   // ================================================================ save data
   // tut: 0 build, 1 build again, 2 merge, 3 zap, 4 shop, 5 done
-  const freshSave = () => ({ v: 2, best: 0, bestWave: 0, muted: false, music: true, tut: 0, howto: false, speed: 1, run: null });
+  const freshSave = () => ({ v: 2, best: 0, bestWave: 0, muted: false, music: true, tut: 0, speed: 1, run: null });
   let S = freshSave();
   let saveLoaded = false, savePending = Promise.resolve();
   let lbSupported = false;
@@ -743,7 +743,6 @@
   let buildMeter = 0, shake = 0, redFlash = 0, banner = null, tooltip = null;
   let zapCd = 0, tutZaps = 0;
   let toastMsg = null;
-  let howto = null;           // { page, then: 'start' | null }
   let hand = null;            // debug: scripted pointer for recordings
   const toast = (txt, col = '#ffffff') => { toastMsg = { txt, col, t: 2.4 }; };
   let overStats = null;
@@ -1230,32 +1229,19 @@
   }
 
   // ---- UI hit-testing (screens and overlays)
-  function overlayRects(underHowto) {
+  function overlayRects() {
     const cy = L.center;
     const R = {};
-    // How to Play sits on top of both the title and the pause menu.
-    if (overlay === 'howto' && howto && !underHowto) {
-      const P = howtoPanel();
-      R.skip = { x: P.x + P.w - 96, y: P.y + 14, w: 82, h: 40 };
-      if (howto.page > 0) R.back = { x: P.x + 24, y: P.y + P.h - 78, w: 150, h: 56 };
-      R.next = { x: P.x + P.w - 214, y: P.y + P.h - 78, w: 190, h: 56 };
-      R.backdrop = { x: -offX, y: 0, w: VW, h: LH, under: true, panel: P };
-      return R;
-    }
     if (screen === 'title') {
       const by = cy + 120;
-      let y = by;
       if (S.run) {
-        R.continue = { x: LW / 2 - 140, y, w: 280, h: 70 }; y += 86;
-        R.newgame = { x: LW / 2 - 140, y, w: 136, h: 54 };
-        R.howto = { x: LW / 2 + 4, y, w: 136, h: 54 }; y += 66;
+        R.continue = { x: LW / 2 - 140, y: by, w: 280, h: 70 };
+        R.newgame = { x: LW / 2 - 110, y: by + 86, w: 220, h: 54 };
+        if (lbSupported) R.lb = { x: LW / 2 - 110, y: by + 152, w: 220, h: 54 };
       } else {
-        R.newgame = { x: LW / 2 - 140, y, w: 280, h: 70 }; y += 86;
-        R.howto = { x: LW / 2 - 140, y, w: 136, h: 54 };
-        if (lbSupported) R.lb = { x: LW / 2 + 4, y, w: 136, h: 54 };
-        y += 66;
+        R.newgame = { x: LW / 2 - 140, y: by, w: 280, h: 70 };
+        if (lbSupported) R.lb = { x: LW / 2 - 110, y: by + 86, w: 220, h: 54 };
       }
-      if (S.run && lbSupported) R.lb = { x: LW / 2 - 110, y, w: 220, h: 54 };
     } else if (screen === 'over') {
       R.retry = { x: LW / 2 - 130, y: cy + 110, w: 260, h: 66 };
       if (lbSupported) R.lb = { x: LW / 2 - 110, y: cy + 192, w: 220, h: 52 };
@@ -1265,8 +1251,7 @@
       R.music = { x: LW / 2 - 130, y: cy - 10, w: 125, h: 52 };
       R.sound = { x: LW / 2 + 5, y: cy - 10, w: 125, h: 52 };
       R.quit = { x: LW / 2 - 130, y: cy + 58, w: 260, h: 52 };
-      R.howto = { x: LW / 2 - 130, y: cy + 126, w: 125, h: 52 };
-      if (lbSupported) R.lb = { x: LW / 2 + 5, y: cy + 126, w: 125, h: 52 };
+      if (lbSupported) R.lb = { x: LW / 2 - 130, y: cy + 126, w: 260, h: 52 };
     } else if (overlay === 'shop') {
       const P = shopPanel();
       R.close = { x: P.x + P.w - 58, y: P.y + 10, w: 48, h: 48 };
@@ -1289,11 +1274,11 @@
       return k;
     }
     if (under) {
-      const P = R[under].panel || shopPanel();
-      if (!inRect(p, P)) return overlay === 'howto' ? 'shopbody' : 'close';
+      const P = shopPanel();
+      if (!inRect(p, P)) return 'close';
       return 'shopbody';
     }
-    if (screen === 'title' || overlay === 'howto') return 'title';
+    if (screen === 'title') return 'title';
     return null;
   }
   function uiAction(id) {
@@ -1301,17 +1286,7 @@
     SFX.click();
     switch (id) {
       case 'continue': startRun(true); break;
-      case 'newgame':
-        S.run = null;
-        if (!S.howto) { howto = { page: 0, then: 'start' }; overlay = 'howto'; } else startRun(false);
-        break;
-      case 'howto': howto = { page: 0, then: null }; overlay = 'howto'; break;
-      case 'next':
-        if (howto.page < HOWTO.length - 1) howto.page++;
-        else finishHowto();
-        break;
-      case 'back': howto.page = Math.max(0, howto.page - 1); break;
-      case 'skip': finishHowto(); break;
+      case 'newgame': S.run = null; startRun(false); break;
       case 'speed':
         S.speed = S.speed === 2 ? 1 : 2; writeSave();
         toast(S.speed === 2 ? 'SPEED 2X' : 'SPEED 1X', '#ffe680');
@@ -1339,13 +1314,6 @@
       default:
         if (id.startsWith('upg_')) buyUpgrade(UPG[+id.slice(4)]);
     }
-  }
-  function finishHowto() {
-    const then = howto && howto.then;
-    S.howto = true; writeSave();
-    howto = null;
-    overlay = screen === 'play' ? 'pause' : null;
-    if (then === 'start') startRun(false);
   }
   function tutSkipRect() {
     const y = tutPanelY();
@@ -2065,124 +2033,6 @@
     }
   }
 
-  // ---- How to play
-  const HOWTO = [
-    { title: 'BUILD TURRETS', lines: ['Hold the Fabricator (or SPACE)', 'to build a new Blaster turret.'] },
-    { title: 'MERGE TO EVOLVE', lines: ['Drag a turret onto a matching one.', 'Two of a tier make the next tier, up to 10.'] },
-    { title: 'GUARD THE LANES', lines: ['Only the 5 front pads fire.', 'Tier 1-3: own lane · 4-6: 3 lanes · 7+: all'] },
-    { title: 'ZAP & UPGRADE', lines: ['Tap aliens to zap them yourself.', 'Spend credits in the SHOP between waves.'] },
-    { title: 'HOLD THE SHIELD', lines: ['Aliens that reach your base hit the shield.', 'Tap 2X to speed up. Beat your best score!'] },
-  ];
-  function howtoPanel() {
-    const h = 640;
-    return { x: 24, y: clamp(L.center - h / 2, L.top, L.bottom - h), w: 492, h };
-  }
-  function drawHowto() {
-    dim(0.78);
-    const P = howtoPanel();
-    panel(P.x, P.y, P.w, P.h, { edge: '#45d8ff' });
-    const pg = HOWTO[howto.page];
-    text(`${howto.page + 1} / ${HOWTO.length}`, P.x + 24, P.y + 34, 15, '#7fb8ff', 'left', { ui: true, stroke: false });
-    text(pg.title, LW / 2, P.y + 82, 32, '#ffffff');
-    // illustration stage
-    const sx = P.x + 26, sy = P.y + 116, sw = P.w - 52, sh = 290;
-    chamfer(sx, sy, sw, sh, 12); ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(80,140,220,0.4)'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.save(); chamfer(sx, sy, sw, sh, 12); ctx.clip();
-    drawHowtoArt(howto.page, LW / 2, sy + sh / 2, sw, sh);
-    ctx.restore();
-    pg.lines.forEach((l, i) => text(l, LW / 2, P.y + 444 + i * 30, 19, i ? '#9fc6ff' : '#ffffff', 'center', { ui: true }));
-    for (let i = 0; i < HOWTO.length; i++) {
-      ctx.fillStyle = i === howto.page ? '#45d8ff' : 'rgba(255,255,255,0.25)';
-      ctx.beginPath(); ctx.arc(LW / 2 - (HOWTO.length - 1) * 11 + i * 22, P.y + 526, i === howto.page ? 6 : 4.5, 0, 7); ctx.fill();
-    }
-    const R = overlayRects();
-    button(R.skip, 'SKIP', 'dark', { id: 'skip', size: 15 });
-    if (R.back) button(R.back, 'BACK', 'dark', { id: 'back', size: 20 });
-    const last = howto.page === HOWTO.length - 1;
-    button(R.next, last ? (howto.then === 'start' ? 'PLAY' : 'GOT IT') : 'NEXT', last ? 'green' : 'blue', { id: 'next', size: 22 });
-  }
-  function drawHowtoArt(page, cx, cy, w, h) {
-    const t = time;
-    if (page === 0) {
-      const cyc = t % 2.4, p = clamp(cyc / 1.5, 0, 1);
-      blit(SPR_FORGE, cx - 100, cy, 0, 0.95);
-      ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.strokeStyle = '#5dffb0';
-      ctx.beginPath(); ctx.arc(cx - 100, cy, 56, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); ctx.stroke(); ctx.lineCap = 'butt';
-      ctx.globalCompositeOperation = 'lighter'; glowAt('#45d8ff', cx - 100, cy, 20 + p * 24, 0.7); ctx.globalCompositeOperation = 'source-over';
-      drawHand(cx - 92, cy + 8, cyc < 1.5);
-      if (cyc > 1.5) {
-        const k = clamp((cyc - 1.5) / 0.4, 0, 1);
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(69,216,255,${1 - k})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(cx - 100, cy); ctx.lineTo(cx + 100, cy); ctx.stroke();
-        ctx.globalCompositeOperation = 'source-over';
-        blit(TS.icon[1], cx + 100, cy, 0, 1.3 * easeOutBack(k));
-      } else {
-        ctx.strokeStyle = 'rgba(90,200,255,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(cx + 100, cy, 40, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-      }
-      text('HOLD', cx - 100, cy + 88, 18, '#5dffb0');
-    } else if (page === 1) {
-      const cyc = t % 2.6, k = clamp(cyc / 1.2, 0, 1), e = k * k * (3 - 2 * k);
-      const ax = cx - 110, bx = cx + 30;
-      if (cyc < 1.25) {
-        blit(TS.icon[1], bx, cy, 0, 1.2);
-        blit(TS.icon[1], lerp(ax, bx, e), cy - Math.sin(e * Math.PI) * 30, 0, 1.2);
-        drawHand(lerp(ax, bx, e) + 10, cy + 12 - Math.sin(e * Math.PI) * 30, true);
-      } else {
-        const q = clamp((cyc - 1.25) / 0.35, 0, 1);
-        ctx.globalCompositeOperation = 'lighter'; glowAt('#4dffa6', bx, cy, 80 * (1 - q * 0.5), 1 - q * 0.6); ctx.globalCompositeOperation = 'source-over';
-        blit(TS.icon[2], bx, cy, 0, 1.2 * easeOutBack(q));
-        text('MERGE!', bx, cy - 82, 22, '#4dffa6');
-      }
-      text('=', cx + 120, cy, 34, '#ffffff');
-      blit(TS.icon[2], cx + 180, cy, 0, 0.75);
-      text('TIER 2', cx + 180, cy + 56, 14, '#4dffa6', 'center', { ui: true });
-    } else if (page === 2) {
-      const lw = w / 5, top = cy - h / 2 + 10, padY = cy + h / 2 - 50;
-      const tiers = [1, 1, 4, 1, 7];
-      const show = Math.floor(t / 1.6) % 3;            // highlight tier 1, 4, then 7 coverage
-      const src = [0, 2, 4][show], reach = [0, 1, 4][show];
-      for (let i = 0; i < 5; i++) {
-        const x = cx - w / 2 + lw * (i + 0.5);
-        const lit = Math.abs(i - src) <= reach;
-        ctx.fillStyle = lit ? rgba(TUR[tiers[src]].col, 0.18) : 'rgba(255,255,255,0.03)';
-        ctx.fillRect(x - lw / 2 + 2, top, lw - 4, padY - top - 30);
-        const ey = top + 20 + ((t * 40 + i * 47) % (padY - top - 80));
-        blit(ES[['scout', 'speeder', 'tank', 'scout', 'shielder'][i]], x, ey, 0, 0.8);
-        blit(TS.icon[tiers[i]], x, padY, 0, 0.6);
-        if (i === src) { ctx.strokeStyle = TUR[tiers[i]].col; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, padY + 4, 34, 0, 7); ctx.stroke(); }
-      }
-      text(`TIER ${tiers[src]}: ${['OWN LANE', '3 LANES', 'ALL LANES'][show]}`, cx, top + 6 + 12, 16, TUR[tiers[src]].col, 'center', { ui: true });
-    } else if (page === 3) {
-      const cyc = t % 1.2;
-      const ax = cx - 90, ay = cy - 20;
-      blit(cyc < 0.1 ? ESW.gunship : ES.gunship, ax, ay, 0, 1.4);
-      if (cyc < 0.15) {
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.beginPath();
-        ctx.moveTo(ax + 10, ay - 120); for (let k = 1; k < 6; k++) ctx.lineTo(ax + rand(-12, 12), ay - 120 + k * 22); ctx.stroke();
-        glowAt('#9ff6ff', ax, ay, 40); ctx.globalCompositeOperation = 'source-over';
-      }
-      drawHand(ax + 8, ay + 10, cyc < 0.3);
-      text('TAP!', ax, ay + 92, 20, '#9ff6ff');
-      creditIcon(cx + 70, cy - 60, 22);
-      text('+CREDITS', cx + 110, cy - 20, 16, '#ffe680', 'center', { ui: true });
-      button({ x: cx + 40, y: cy + 20, w: 140, h: 50 }, 'SHOP', 'gold', { size: 22 });
-    } else if (page === 4) {
-      const f = 1 - (t % 3) / 3.4;
-      blit(ES.boss, cx, cy - 50, 0, 0.9);
-      ctx.globalCompositeOperation = 'lighter';
-      const by = cy + 70;
-      ctx.fillStyle = rgba(f > 0.5 ? '#5ad8ff' : '#ff4a5a', 0.85); ctx.fillRect(cx - w / 2, by, w, 3);
-      glowAt('#ff3d6e', cx + Math.sin(t * 3) * 60, by - 20 + ((t * 120) % 60), 10);
-      ctx.globalCompositeOperation = 'source-over';
-      bar(cx - 150, by + 26, 300, 18, f, f > 0.5 ? '#8ff0ff' : '#ff8a8a', f > 0.5 ? '#1f8fe0' : '#c0203a');
-      text('SHIELD', cx, by + 36, 12, '#ffffff', 'center', { ui: true, sw: 3 });
-      button({ x: cx + 170, y: cy - 130, w: 48, h: 48 }, '2X', 'gold', { size: 16 });
-    }
-  }
-
   function drawToast() {
     if (!toastMsg) return;
     const a = clamp(toastMsg.t * 3, 0, 1);
@@ -2271,28 +2121,26 @@
     blit(TS.head[tier], LW / 2, cy - 40, Math.sin(time * 1.5) * 0.6, 1.5);
     text(`TIER ${tier}  ${TUR[tier].name.toUpperCase()}`, LW / 2, cy + 50, 18, glowCol, 'center');
     text(TUR[tier].info, LW / 2, cy + 76, 16, '#cfe6ff', 'center', { ui: true });
-    const R = overlayRects(true);
+    const R = overlayRects();
     if (R.continue) button(R.continue, `CONTINUE · WAVE ${S.run.wave}`, 'green', { id: 'continue', size: 22 });
-    button(R.newgame, S.run ? 'NEW GAME' : 'PLAY', S.run ? 'blue' : 'green', { id: 'newgame', size: S.run ? 18 : 30 });
-    button(R.howto, 'HOW TO PLAY', 'dark', { id: 'howto', size: 15 });
-    if (R.lb) button(R.lb, 'LEADERBOARD', 'purple', { id: 'lb', size: S.run ? 18 : 15 });
-    const lastY = Math.max(R.howto.y + R.howto.h, R.lb ? R.lb.y + R.lb.h : 0);
+    button(R.newgame, S.run ? 'NEW GAME' : 'PLAY', S.run ? 'blue' : 'green', { id: 'newgame', size: S.run ? 20 : 30 });
+    if (R.lb) button(R.lb, 'LEADERBOARD', 'purple', { id: 'lb', size: 18 });
+    const lastY = (R.lb || R.newgame).y + (R.lb || R.newgame).h;
     text(`BEST SCORE  ${fmt(S.best)}   ·   BEST WAVE  ${S.bestWave}`, LW / 2, lastY + 30, 16, '#ffe680', 'center', { ui: true });
   }
 
   function drawPause() {
     dim();
     const cy = L.center;
-    panel(LW / 2 - 165, cy - 200, 330, 404);
+    panel(LW / 2 - 165, cy - 200, 330, lbSupported ? 404 : 340);
     text('PAUSED', LW / 2, cy - 160, 38);
     text(`Wave ${run.wave}  ·  Score ${fmt(run.score)}`, LW / 2, cy - 122, 18, '#9fc6ff', 'center', { ui: true });
-    const R = overlayRects(true);
+    const R = overlayRects();
     button(R.resume, 'RESUME', 'green', { id: 'resume', size: 26 });
     button(R.music, S.music ? 'MUSIC ON' : 'MUSIC OFF', S.music ? 'blue' : 'dark', { id: 'music', size: 16 });
     button(R.sound, S.muted ? 'SFX OFF' : 'SFX ON', S.muted ? 'dark' : 'blue', { id: 'sound', size: 16 });
     button(R.quit, 'SAVE & QUIT', 'dark', { id: 'quit', size: 18 });
-    button(R.howto, 'HOW TO PLAY', 'dark', { id: 'howto', size: 15 });
-    if (R.lb) button(R.lb, 'LEADERBOARD', 'purple', { id: 'lb', size: 15 });
+    if (R.lb) button(R.lb, 'LEADERBOARD', 'purple', { id: 'lb', size: 18 });
   }
 
   function shopPanel() {
@@ -2423,7 +2271,6 @@
       ctx.setTransform(k, 0, 0, k, offX * k, 0);
       drawTitle();
     }
-    if (overlay === 'howto' && howto) drawHowto();
     drawToast();
     if (hand) drawHand(hand.x, hand.y, hand.down);
     if (SHOW_SAFE) drawSafeZone();
@@ -2454,7 +2301,7 @@
       spawn: (type, x, y) => { const e = spawnEnemy(type, clamp(Math.round((x - 54) / 108), 0, 4), x, y); return e; },
       kill: (e) => kill(e), sprites: () => ({ TS, ES, SPR_FORGE, glow }),
       rects: () => overlayRects(), screenOf: (x, y) => [(x + offX) * scale, y * scale],
-      get S() { return S; }, get overlay() { return overlay; }, get howto() { return howto; }, build: forgeBuild, buy: (i) => buyUpgrade(UPG[i]), go: () => { countdown = 0; },
+      get S() { return S; }, get overlay() { return overlay; }, build: forgeBuild, buy: (i) => buyUpgrade(UPG[i]), go: () => { countdown = 0; },
       L, SLOTS, start: () => startRun(false), setTut: (v) => { S.tut = v; },
       set speed(v) { timeScale = v; }, hold(v) { spaceHeld = v; }, zap: (x, y) => zapAt({ x, y }, true),
     };
