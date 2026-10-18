@@ -2,7 +2,7 @@
 
 An endless ragdoll archery game built as a **Snapchat Web Lens**.
 
-You are a hooded archer on a stone castle tower. Robot archers keep flying
+You are a hooded archer on a stone castle tower. Enemy archers keep flying
 in on floating sky islands and shooting back. Pull back, aim, and drop as many as you can before you
 fall. Every kill adds to your lifetime **total kills**, and that total is
 what the Snapchat leaderboard ranks.
@@ -17,7 +17,7 @@ what the Snapchat leaderboard ranks.
 
 - Shooting costs 10 stamina and jumping costs 20. Stamina refills on its own.
 - **Headshots** do 2.5× damage (1.6× against helmets), body shots 1×, and
-  limbs 0.6×.
+  limbs 0.6×. Every headshot also heals you **+5 HP**.
 - Hitting a bot while it draws its bow spoils its shot.
 - Shoot an incoming arrow out of the air to **block** it (+1 coin).
 - **Kill combos**: kills within 3 seconds of each other chain into DOUBLE
@@ -34,7 +34,7 @@ what the Snapchat leaderboard ranks.
   | Coins | +15 coins |
 
 - **Birds** fly across the top now and then. Snipe one for +5 coins.
-- **Golden bots** (from 5 kills) never shoot but escape after 7 seconds.
+- **Gold thieves** (from 5 kills) never shoot but escape after 7 seconds.
   Drop one in time for a 25-coin jackpot.
 - **Levels**: each boss you beat is a level up, and the sky changes: Sky
   Meadow → Sunset Peaks → Moonlit Wilds → Ember Ridge, then around again.
@@ -42,22 +42,23 @@ what the Snapchat leaderboard ranks.
 - The first run is the tutorial: a hand pointer shows the drag, and bots hold
   their fire until you take your first shot.
 
-### Bots (unlimited)
+### Enemies (unlimited)
 
-Bots never stop coming. They get more health, hit harder, reload faster and
+Enemies never stop coming. They get more health, hit harder, reload faster and
 aim better as your kill count rises. One bot is on screen at first, then two
 from 3 kills, then three from 12. From 15 kills some platforms move.
 
 | Bot | From kill | Trait |
 |---|---|---|
-| Archer (red) | 0 | Basic |
-| Scout (green) | 4 | Fast reload, weaker |
-| Heavy (orange helmet) | 10 | Tough, helmet blunts headshots |
-| Sniper (purple) | 18 | Very accurate and hard-hitting. Its red laser sight shows the shot before it fires, so jump |
-| Boss (gold crown) | every 10th kill | Big, tough, fires a 3-arrow volley |
+| Archer (red bandana) | 0 | Basic |
+| Scout (teal hood) | 4 | Fast reload, weaker |
+| Knight (steel helmet, orange plume) | 10 | Tough, helmet blunts headshots |
+| Sniper (purple hood and mask) | 18 | Very accurate and hard-hitting. Its red laser sight shows the shot before it fires, so jump |
+| King (crown and beard) | every 10th kill | Boss: big, tough, fires a 3-arrow volley |
 
 Kills drop coins that fly up to your counter (more for headshots, combos,
-bosses and deep runs). Destroyed robots burst into sparks and bolts.
+bosses and deep runs). Knocked-out archers see stars and ragdoll off their
+island.
 
 ### Upgrades
 
@@ -88,7 +89,7 @@ inside Snapchat". The real panel can only be tested on a phone after upload.
 - `index.html` at the root of the zip, and every path is relative
 - Self-contained: no network requests. All art is drawn on a canvas, all
   sound is synthesised with Web Audio, and the two fonts (Russo One and
-  Rajdhani, SIL OFL) ship in `fonts/`. The zip is about 64 KB.
+  Rajdhani, SIL OFL) ship in `fonts/`. The zip is about 65 KB.
 - No camera, microphone or motion sensors
 - The Web Lens API (`@snap/web-lens-api` v0.1.2, `snap-api.js`) ships inside
   the zip and loads before `game.js`. The game calls `snapchat.init()` once
@@ -99,11 +100,10 @@ inside Snapchat". The real panel can only be tested on a phone after upload.
   is written before the first read answers, and only one write is in flight
   at a time.
 - **Safe zone**: everything the player reads or touches (HUD, tower bars,
-  JUMP, bots, balloons, panels) stays inside `CFG.SAFE_TOP` /
-  `CFG.SAFE_BOTTOM`: the top 11% and bottom 14% of the screen are left to
-  Snapchat's controls (or the device's safe-area insets if larger). Only
-  scenery is drawn there: the sky up top and a sea of clouds along the
-  bottom. Add `#safe` to the URL to tint the zones while testing.
+  JUMP, enemies, balloons, panels) stays inside `CFG.SAFE_TOP` /
+  `CFG.SAFE_BOTTOM`: the top 10% and bottom 10% of the screen (or the
+  device's safe-area insets if larger) are left plain black for Snapchat's
+  controls. Add `#safe` to the URL to draw the zone edges while testing.
 - Portrait layout that stretches to tall phones and centres on wide screens.
   Touch, mouse and keyboard all work. Audio starts on the first tap, and the
   game pauses when the app goes to the background.
