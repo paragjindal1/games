@@ -104,7 +104,7 @@ Everything you need is in this folder:
 |---|---|
 | `release/starforge.zip` | The Lens. `index.html` is at the zip root. Upload this. |
 | `marketing/icon.png` | Lens icon, 1024×1024 (`icon-512.png` is 512×512) |
-| `marketing/preview.mp4` | Preview video: 8 s, 1080×1920, 30 fps, H.264, no sound |
+| `marketing/preview.mp4` | Preview video: 8 s, 1080×1920, 30 fps, H.264 + AAC sound, ends on the logo |
 | `marketing/logo.png` | Transparent wordmark logo, 1600×700 |
 
 1. In **My Lenses**, create a Web Lens and upload `release/starforge.zip`.

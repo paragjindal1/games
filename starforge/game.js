@@ -744,6 +744,7 @@
   let zapCd = 0, tutZaps = 0;
   let toastMsg = null;
   let hand = null;            // debug: scripted pointer for recordings
+  let endcard = 0;            // debug: logo end card opacity for the preview video
   const toast = (txt, col = '#ffffff') => { toastMsg = { txt, col, t: 2.4 }; };
   let overStats = null;
   const popAnim = new Array(13).fill(0);
@@ -2220,6 +2221,30 @@
     ctx.globalAlpha = 1;
   }
 
+  function drawEndcard(a) {
+    ctx.globalAlpha = a;
+    dim(0.82);
+    const cy = L.center - 40;
+    const s = 0.9 + a * 0.1;
+    ctx.save(); ctx.translate(LW / 2, cy); ctx.scale(s, s);
+    ctx.shadowColor = '#45d8ff'; ctx.shadowBlur = 30;
+    setFont(86); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 11; ctx.strokeStyle = '#06102e';
+    let gr = ctx.createLinearGradient(0, -150, 0, -50); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, '#8ff0ff'); gr.addColorStop(1, '#3a7bff');
+    ctx.strokeText('STAR', 0, -100); ctx.fillStyle = gr; ctx.fillText('STAR', 0, -100);
+    gr = ctx.createLinearGradient(0, -30, 0, 50); gr.addColorStop(0, '#ffe680'); gr.addColorStop(1, '#ff6a3c');
+    ctx.shadowColor = '#ff8a3c';
+    ctx.strokeText('FORGE', 0, -14); ctx.fillStyle = gr; ctx.fillText('FORGE', 0, -14);
+    ctx.restore();
+    ctx.globalAlpha = a;
+    text('MERGE  ·  BUILD  ·  DEFEND', LW / 2, cy + 60, 22, '#cfe6ff', 'center', { ui: true });
+    const t = 1 + Math.sin(time * 6) * 0.04;
+    ctx.save(); ctx.translate(LW / 2, cy + 160); ctx.scale(t, t);
+    button({ x: -140, y: -35, w: 280, h: 70 }, 'PLAY NOW', 'green', { size: 30 });
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   function drawLoading() {
     ctx.fillStyle = '#05061a'; ctx.fillRect(-offX, 0, VW, LH);
     const cy = LH / 2;
@@ -2273,6 +2298,7 @@
     }
     drawToast();
     if (hand) drawHand(hand.x, hand.y, hand.down);
+    if (endcard > 0) drawEndcard(endcard);
     if (SHOW_SAFE) drawSafeZone();
   }
 
@@ -2296,7 +2322,7 @@
       get run() { return run; }, get screen() { return screen; }, get enemies() { return enemies; },
       merge: tryMerge, over: () => gameOver(),
       set manual(v) { manual = v; }, step(n = 1, dt = 1 / 30) { for (let i = 0; i < n; i++) update(dt); render(); },
-      set hand(v) { hand = v; }, set banner(v) { banner = v; },
+      set hand(v) { hand = v; }, set endcard(v) { endcard = v; }, set banner(v) { banner = v; },
       setDrag(from, x, y) { drag = from < 0 ? null : { id: -1, from, tier: run.slots[from], x, y, sx: 0, sy: 0, moved: true }; },
       spawn: (type, x, y) => { const e = spawnEnemy(type, clamp(Math.round((x - 54) / 108), 0, 4), x, y); return e; },
       kill: (e) => kill(e), sprites: () => ({ TS, ES, SPR_FORGE, glow }),
