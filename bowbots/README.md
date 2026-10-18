@@ -52,7 +52,7 @@ from 3 kills, then three from 12. From 15 kills some platforms move.
 |---|---|---|
 | Archer (red) | 0 | Basic |
 | Scout (green) | 4 | Fast reload, weaker |
-| Heavy (grey helmet) | 10 | Tough, helmet blunts headshots |
+| Heavy (orange helmet) | 10 | Tough, helmet blunts headshots |
 | Sniper (purple) | 18 | Very accurate and hard-hitting. Its red laser sight shows the shot before it fires, so jump |
 | Boss (gold crown) | every 10th kill | Big, tough, fires a 3-arrow volley |
 
