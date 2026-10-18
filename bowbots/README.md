@@ -2,8 +2,8 @@
 
 An endless ragdoll archery game built as a **Snapchat Web Lens**.
 
-You stand on a stone tower. Bot archers keep flying in on floating blocks
-and shooting back. Pull back, aim, and drop as many as you can before you
+You are a hooded archer on a stone castle tower. Robot archers keep flying
+in on floating sky islands and shooting back. Pull back, aim, and drop as many as you can before you
 fall. Every kill adds to your lifetime **total kills**, and that total is
 what the Snapchat leaderboard ranks.
 
@@ -20,7 +20,24 @@ what the Snapchat leaderboard ranks.
   limbs 0.6×.
 - Hitting a bot while it draws its bow spoils its shot.
 - Shoot an incoming arrow out of the air to **block** it (+1 coin).
-- An **apple** drifts past now and then. Hit it for +25 HP and +3 coins.
+- **Kill combos**: kills within 3 seconds of each other chain into DOUBLE
+  KILL, TRIPLE KILL, QUAD KILL, RAMPAGE… with bonus coins.
+- **Power-up balloons** float up through the sky. Shoot one to pop it:
+
+  | Balloon | Effect |
+  |---|---|
+  | Fire Arrows | 12 s: arrows set bots on fire (damage over time) |
+  | Triple Shot | 12 s: two extra arrows per shot |
+  | Bomb Arrows | 10 s: arrows explode on impact and hit every bot nearby |
+  | Freeze | Freezes every bot for 4 s; frozen bots take 25% more damage |
+  | Heal | +40 HP (shows up more often when you are low) |
+  | Coins | +15 coins |
+
+- **Birds** fly across the top now and then. Snipe one for +5 coins.
+- **Golden bots** (from 5 kills) never shoot but escape after 7 seconds.
+  Drop one in time for a 25-coin jackpot.
+- **Levels**: each boss you beat is a level up, and the sky changes: Sky
+  Meadow → Sunset Peaks → Moonlit Wilds → Ember Ridge, then around again.
 - Bots aim at where you stand on the tower, so a well-timed jump dodges them.
 - The first run is the tutorial: a hand pointer shows the drag, and bots hold
   their fire until you take your first shot.
@@ -39,7 +56,8 @@ from 3 kills, then three from 12. From 15 kills some platforms move.
 | Sniper (purple) | 18 | Very accurate and hard-hitting. Its red laser sight shows the shot before it fires, so jump |
 | Boss (gold crown) | every 10th kill | Big, tough, fires a 3-arrow volley |
 
-Kills drop coins (more for headshots, bosses and deep runs).
+Kills drop coins that fly up to your counter (more for headshots, combos,
+bosses and deep runs). Destroyed robots burst into sparks and bolts.
 
 ### Upgrades
 
@@ -70,7 +88,7 @@ inside Snapchat". The real panel can only be tested on a phone after upload.
 - `index.html` at the root of the zip, and every path is relative
 - Self-contained: no network requests. All art is drawn on a canvas, all
   sound is synthesised with Web Audio, and the two fonts (Russo One and
-  Rajdhani, SIL OFL) ship in `fonts/`. The zip is about 54 KB.
+  Rajdhani, SIL OFL) ship in `fonts/`. The zip is about 64 KB.
 - No camera, microphone or motion sensors
 - The Web Lens API (`@snap/web-lens-api` v0.1.2, `snap-api.js`) ships inside
   the zip and loads before `game.js`. The game calls `snapchat.init()` once
@@ -80,10 +98,12 @@ inside Snapchat". The real panel can only be tested on a phone after upload.
   tutorial flag are saved through `snapchat.storage` (key `save`). Nothing
   is written before the first read answers, and only one write is in flight
   at a time.
-- **Safe zone**: all UI stays inside `CFG.SAFE_TOP` / `CFG.SAFE_BOTTOM`
-  (10% of the screen height each by default, or the device's safe-area
-  insets if larger), set at the top of `game.js`. Add `#safe` to the URL to
-  draw the zone while testing.
+- **Safe zone**: everything the player reads or touches (HUD, tower bars,
+  JUMP, bots, balloons, panels) stays inside `CFG.SAFE_TOP` /
+  `CFG.SAFE_BOTTOM`: the top 11% and bottom 14% of the screen are left to
+  Snapchat's controls (or the device's safe-area insets if larger). Only
+  scenery is drawn there: the sky up top and a sea of clouds along the
+  bottom. Add `#safe` to the URL to tint the zones while testing.
 - Portrait layout that stretches to tall phones and centres on wide screens.
   Touch, mouse and keyboard all work. Audio starts on the first tap, and the
   game pauses when the app goes to the background.
