@@ -17,7 +17,18 @@ and keep the shield up for as long as you can.
 | Turret info | Tap a turret |
 | Sell | Drag a turret onto **SELL** |
 | Start the wave early | **GO NOW** during the countdown (+5 credits) |
+| Speed up | **2X** button in the top bar (tap again for 1X) |
 | Pause | Pause button, `Esc` or `P` |
+
+### Tutorial
+
+- **How to Play**: five animated cards (build, merge, lanes, zap and shop,
+  shield). They open automatically the first time a player taps **PLAY**, and
+  any time from the title screen or the pause menu.
+- **Guided first game**: a hand pointer and a spotlight walk the player
+  through it. Build a turret, build a second, drag one onto the other to
+  merge, then zap aliens in wave 1, then open the shop. The first wave only
+  starts after the first merge. **SKIP** ends the guide at any point.
 
 Only the five pads behind the shield fire. Turrets of tier 1–3 cover their
 own lane, tiers 4–6 also cover the two neighbouring lanes, and tier 7+ can hit
@@ -81,16 +92,46 @@ the current run.
   sound effects can be switched off separately, and the game pauses when the
   app goes to the background.
 
+## Upload to Snapchat
+
+Everything you need is in this folder:
+
+| File | What it is |
+|---|---|
+| `release/starforge.zip` | The Lens. `index.html` is at the zip root. Upload this. |
+| `marketing/icon.png` | Lens icon, 1024×1024 (`icon-512.png` is 512×512) |
+| `marketing/preview.mp4` | Preview video: 8 s, 1080×1920, 30 fps, H.264, no sound |
+| `marketing/logo.png` | Transparent wordmark logo, 1600×700 |
+
+1. In **My Lenses**, create a Web Lens and upload `release/starforge.zip`.
+2. Add `marketing/icon.png` as the Lens icon and `marketing/preview.mp4` as the
+   preview video.
+3. **Turn on the leaderboard for the Lens.** The Web Lens API only reports
+   `leaderboards` to Lenses configured with the leaderboard module. Without
+   it, the game hides its LEADERBOARD buttons and still plays normally.
+
+### Leaderboard check
+
+The game calls `snapchat.init()`, checks `isSupported('leaderboards')`,
+submits the final score of each run with `leaderboards.submitScore({ score })`
+(an integer, higher is better), and opens Snapchat's panel with
+`leaderboards.show()`.
+
+Tested in a browser against the API's desktop stub: `submitScore` resolves
+(`{"bestScore":1234}`) and `show()` resolves. The stub has no panel to show,
+so the game displays "Score sent · the leaderboard opens inside Snapchat"
+there. If `show()` fails inside Snapchat, the game shows "Leaderboard
+unavailable right now". The real panel can only be tested on a phone after
+upload.
+
 ## Build and upload
 
 ```sh
-./scripts/build-zip.sh        # -> dist/starforge.zip
+./scripts/build-zip.sh        # rebuilds release/starforge.zip
 ```
-
-Upload `dist/starforge.zip` to **My Lenses** with a Lens icon and a preview
-video.
 
 For local testing, serve the folder with any static server (fonts need
 `http://`), or open `index.html` directly. Outside Snapchat the API uses its
 desktop stub, so saves only last until you reload. `#debug` exposes a
-`window.__sf` test hook.
+`window.__sf` test hook, and `#hires` renders sprites at high resolution
+for marketing images.
