@@ -30,6 +30,8 @@
   const LEVELS = window.LEVELS || [];
   const SHOW_SAFE = /safe/.test(location.hash);
   const DEBUG = /debug/.test(location.hash);
+  const HIRES = /hires/.test(location.hash);   // 3x canvas for marketing renders
+  const TONE_LOG = DEBUG ? [] : null;           // every sound played, for the preview video's audio
   const FONT = 'Fredoka, "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif';
   const INK = '#1d2b5a';
 
@@ -95,7 +97,7 @@
   }
 
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, HIRES ? 3 : 2);
     const cw = Math.max(1, window.innerWidth), ch = Math.max(1, window.innerHeight);
     canvas.width = Math.round(cw * dpr);
     canvas.height = Math.round(ch * dpr);
@@ -192,6 +194,7 @@
     master.connect(comp);
   }
   function tone(freq, dur, type = 'sine', vol = 0.2, delay = 0, slideTo = 0) {
+    if (TONE_LOG && !S.muted) TONE_LOG.push([time + delay, freq, dur, type, vol, slideTo]);
     if (!audio || S.muted) return;
     const t0 = audio.currentTime + delay;
     const o = audio.createOscillator(), g = audio.createGain();
@@ -856,12 +859,12 @@
     ctx.translate(LW / 2, cy); ctx.scale(k, k);
     const words = ['GREAT!', 'AWESOME!', 'BRILLIANT!', 'SPLENDID!', 'FANTASTIC!', 'WOW!', 'AMAZING!'];
     const msg = words[(S.level - 1) % words.length];
-    rrect(-200, -74, 400, 148, 30); ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
-    text(msg, 0, -22, 50, level.theme.accent);
-    text('Level ' + S.level + ' complete', 0, 26, 22, INK);
-    drawCoinIcon(-44, 54, 11);
-    text('+' + CFG.LEVEL_COINS, -26, 55, 18, '#c68400', 'left');
-    if (winT > 1.1) text('tap to continue', 40, 55, 14, 'rgba(29,43,90,0.55)');
+    rrect(-200, -82, 400, 176, 30); ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+    text(msg, 0, -34, 50, level.theme.accent);
+    text('Level ' + S.level + ' complete', 0, 12, 22, INK);
+    drawCoinIcon(-20, 44, 12);
+    text('+' + CFG.LEVEL_COINS, -2, 45, 20, '#c68400', 'left');
+    if (winT > 1.1) text('tap to continue', 0, 74, 14, 'rgba(29,43,90,0.55)');
     ctx.restore();
   }
 
@@ -1019,7 +1022,7 @@
     screen = 'play';
     if (DEBUG) {
       window.__ww = {
-        get S() { return S; }, get level() { return level; }, L,
+        get S() { return S; }, get level() { return level; }, get time() { return time; }, L, tones: TONE_LOG,
         solve() {
           for (const w of level.words) {
             if (w.found) continue;
