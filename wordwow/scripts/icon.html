@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="./style.css">
+<canvas id="c" width="1024" height="1024" style="position:fixed;inset:0;width:1024px;height:1024px"></canvas>
+<script>
+document.fonts.load('700 100px Fredoka').then(() => {
+  const g = document.getElementById('c').getContext('2d'), W = 1024;
+  const sky = g.createLinearGradient(0, 0, 0, W); sky.addColorStop(0, '#2f66b8'); sky.addColorStop(0.6, '#8fc1ec'); sky.addColorStop(1, '#dcecf5');
+  g.fillStyle = sky; g.fillRect(0, 0, W, W);
+  const hills = ['#9cc98a', '#5f9e4f', '#3f7d3a'];
+  hills.forEach((c, i) => { g.beginPath(); g.moveTo(0, W); for (let x = 0; x <= W; x += 8) g.lineTo(x, W * (0.66 + i * 0.1) - Math.sin(x / W * (3 + i) + i) * 40); g.lineTo(W, W); g.fillStyle = c; g.fill(); });
+  const tile = (ch, x, y, s) => { g.fillStyle = 'rgba(20,30,70,0.25)'; rr(x, y + 8, s, s, 20); g.fill(); g.fillStyle = '#fff'; rr(x, y, s, s, 20); g.fill();
+    g.fillStyle = '#1d2b5a'; g.font = `700 ${s * 0.66}px Fredoka`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, x + s / 2, y + s / 2 + 4); };
+  function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+  const s = 150, ox = 137, oy = 120;
+  // W O W across, O W down from the O... crossword
+  'WOW'.split('').forEach((ch, i) => tile(ch, ox + i * (s + 12), oy, s));
+  'ORD'.split('').forEach((ch, i) => i && tile(ch, ox + (s + 12), oy + i * (s + 12), s));
+  // wheel
+  const cx = 512, cy = 760, R = 210;
+  g.fillStyle = 'rgba(10,20,60,0.2)'; g.beginPath(); g.arc(cx, cy + 10, R, 0, 7); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+  const pts = [[cx - 110, cy - 50], [cx, cy + 90], [cx + 110, cy - 50]];
+  g.strokeStyle = '#2f6fd6'; g.lineWidth = 34; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
+  ['W', 'O', 'W'].forEach((ch, i) => { const [x, y] = pts[i]; g.fillStyle = '#2f6fd6'; g.beginPath(); g.arc(x, y, 72, 0, 7); g.fill();
+    g.fillStyle = '#fff'; g.font = '700 100px Fredoka'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, x, y + 6); });
+  document.title = 'done';
+});
+</script>
