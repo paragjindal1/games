@@ -155,7 +155,7 @@
   const freshSave = () => ({ v: 1, level: 1, coins: CFG.START_COINS, found: [], hints: [], bonus: [], jar: 0, muted: false, bestLevel: 0 });
   let S = freshSave();
   let saveLoaded = false, savePending = Promise.resolve();
-  let lbSupported = false;
+  let lbSupported = false, lbWhy = '';   // lbWhy: why the leaderboard is off, shown when the trophy is tapped
 
   function writeSave() {
     if (!saveLoaded || !snap) return;
@@ -164,22 +164,25 @@
       .then(() => snap.storage.set('save', state))
       .then(() => true, (e) => { console.warn('Save failed:', e && e.message); return false; });
   }
+  // Score = levels cleared. A new player sends 0, so the board has data
+  // for show() (it rejects when it has none) and the player is listed.
   function submitScore() {
-    const done = S.level - 1;
-    if (!lbSupported || done <= 0) return Promise.resolve();
-    return snap.leaderboards.submitScore({ score: done })
-      .catch((e) => console.warn('Leaderboard submit failed:', e && e.message));
+    if (!lbSupported) return Promise.resolve(false);
+    const score = Math.max(0, Math.round(S.level - 1));
+    return snap.leaderboards.submitScore({ score })
+      .then(() => true, (e) => { console.warn('Leaderboard submit failed:', e && e.message); return false; });
   }
   async function showLeaderboard() {
-    if (!lbSupported) return;
+    if (!lbSupported) { toast(lbWhy || 'Leaderboard is not available here'); return; }
+    await submitScore();
     try {
-      await submitScore();
       await snap.leaderboards.show();
       // The desktop stub accepts the call but has no panel to open.
       if (snap.isStub) toast('Score sent · the leaderboard opens inside Snapchat');
     } catch (e) {
-      console.warn('Leaderboard unavailable:', e && e.message);
-      toast('Leaderboard unavailable right now');
+      const code = (e && e.message) || 'unknown error';
+      console.warn('Leaderboard unavailable:', code);
+      toast(code === 'ERR_INTERNAL' ? 'Leaderboard is still loading, try again' : 'Leaderboard unavailable (' + code + ')');
     }
   }
 
@@ -456,7 +459,7 @@
       return;
     }
     if (inCircle(p, L.sound, 8)) { setMuted(!S.muted); SFX.tap(); return; }
-    if (lbSupported && inCircle(p, L.board, 8)) { SFX.tap(); showLeaderboard(); return; }
+    if (snap && inCircle(p, L.board, 8)) { SFX.tap(); showLeaderboard(); return; }
     if (inCircle(p, L.shuffle, 10)) { shuffleWheel(); return; }
     if (inCircle(p, L.hint, 10)) { useHint(); return; }
     if (inCircle(p, L.jar, 10)) {
@@ -835,7 +838,11 @@
     text(t.name.toUpperCase().split('').join(' '), L.title.x, L.title.y + 22, 12, rgba(BONE_HEX, 0.85), 'center', { stroke: 'rgba(10,3,18,0.7)', sw: 3 });
     iconButton(L.sound, t.accent);
     drawSpeaker(L.sound.x, L.sound.y, S.muted);
-    if (lbSupported) { iconButton(L.board, t.accent); drawTrophy(L.board.x, L.board.y); }
+    if (snap) {
+      ctx.save(); if (!lbSupported) ctx.globalAlpha = 0.45;
+      iconButton(L.board, t.accent); drawTrophy(L.board.x, L.board.y);
+      ctx.restore();
+    }
   }
   function iconButton(b, accent, k = 1, ring = 0) {
     ctx.save();
@@ -1281,8 +1288,11 @@
       : Promise.resolve();
     let saved = null;
     if (snap) {
-      try { await snap.init(); } catch (e) { console.warn('snapchat.init failed:', e && e.message); }
+      let initErr = '';
+      try { await snap.init(); } catch (e) { initErr = (e && e.message) || 'error'; console.warn('snapchat.init failed:', initErr); }
       lbSupported = snap.isSupported('leaderboards');
+      // init() only reports leaderboards to Lenses set up with the leaderboard module in My Lenses
+      if (!lbSupported) lbWhy = initErr === 'ERR_UNSUPPORTED_HOST' ? 'Update Snapchat to use the leaderboard' : 'Leaderboard is not turned on for this Lens';
       if (snap.isSupported('storage')) {
         try {
           const res = await snap.storage.get('save');
@@ -1296,6 +1306,7 @@
     loadLevel(Math.max(1, S.level | 0));
     layout();
     screen = 'play';
+    submitScore();   // puts the player on the board with their current progress
     if (DEBUG) {
       window.__ww = {
         get S() { return S; }, get level() { return level; }, get time() { return time; }, L, tones: TONE_LOG,

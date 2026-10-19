@@ -45,9 +45,13 @@ On a desktop you can also type letters and press **Enter**.
   and the sound setting are saved through `snapchat.storage` (key `save`)
   after every word and when the Lens is hidden. Nothing is written before the
   first read answers, and writes are chained so only one is in flight.
-- **Leaderboards**: the number of levels cleared is submitted as the score
-  (an integer, higher is better) after each level. The trophy button opens
-  Snapchat's panel and only appears when the capability is supported.
+- **Leaderboards**: the score is the number of levels cleared (an integer,
+  higher is better). It is submitted when the Lens opens (0 for a new player,
+  so the board always has data for the panel), after every level, and again
+  right before the trophy opens Snapchat's panel. If the capability is
+  missing, the trophy is dimmed and tapping it says why: the leaderboard is
+  not turned on for the Lens, or the Snapchat app is too old for the API. If
+  the panel fails to open, the error code is shown.
 - **Safe zone**: every button, the grid, the wheel and all text stay inside `CFG.SAFE_TOP` / `CFG.SAFE_BOTTOM` (10%
   of the screen height each, or the device's safe-area insets if larger), set
   at the top of `game.js`. Only scenery (sky, hills, jack-o'-lanterns) is
@@ -65,8 +69,10 @@ On a desktop you can also type letters and press **Enter**.
 
 1. In **My Lenses**, create a Web Lens and upload `release/wordwow.zip`.
 2. Add `marketing/icon.png` as the Lens icon.
-3. Turn on the leaderboard for the Lens if you want the trophy button. Without
-   it the game hides the button and plays normally.
+3. **Turn on the leaderboard for the Lens** (add the leaderboard module in My
+   Lenses). The Web Lens API only reports `leaderboards` to Lenses that have
+   it; without it the trophy is dimmed, no scores are sent, and the game still
+   plays normally. Re-upload or refresh the Lens after turning it on.
 
 ## Build
 
