@@ -1,28 +1,57 @@
-<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="./style.css">
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="../style.css">
 <canvas id="c" width="1024" height="1024" style="position:fixed;inset:0;width:1024px;height:1024px"></canvas>
 <script>
-document.fonts.load('700 100px Fredoka').then(() => {
+// Lens icon: haunted night, glowing pumpkin tiles spelling WOW / WORD, and the letter wheel.
+Promise.all([document.fonts.load('700 100px Fredoka'), document.fonts.load('400 100px Creepster')]).then(() => {
   const g = document.getElementById('c').getContext('2d'), W = 1024;
-  const sky = g.createLinearGradient(0, 0, 0, W); sky.addColorStop(0, '#2f66b8'); sky.addColorStop(0.6, '#8fc1ec'); sky.addColorStop(1, '#dcecf5');
+  const sky = g.createLinearGradient(0, 0, 0, W);
+  sky.addColorStop(0, '#0b0520'); sky.addColorStop(0.55, '#2a0f52'); sky.addColorStop(1, '#6a2a72');
   g.fillStyle = sky; g.fillRect(0, 0, W, W);
-  const hills = ['#9cc98a', '#5f9e4f', '#3f7d3a'];
-  hills.forEach((c, i) => { g.beginPath(); g.moveTo(0, W); for (let x = 0; x <= W; x += 8) g.lineTo(x, W * (0.66 + i * 0.1) - Math.sin(x / W * (3 + i) + i) * 40); g.lineTo(W, W); g.fillStyle = c; g.fill(); });
-  const tile = (ch, x, y, s) => { g.fillStyle = 'rgba(20,30,70,0.25)'; rr(x, y + 8, s, s, 20); g.fill(); g.fillStyle = '#fff'; rr(x, y, s, s, 20); g.fill();
-    g.fillStyle = '#1d2b5a'; g.font = `700 ${s * 0.66}px Fredoka`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, x + s / 2, y + s / 2 + 4); };
-  function rr(x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
-  const s = 150, ox = 137, oy = 120;
-  // W O W across, O W down from the O... crossword
-  'WOW'.split('').forEach((ch, i) => tile(ch, ox + i * (s + 12), oy, s));
-  'ORD'.split('').forEach((ch, i) => i && tile(ch, ox + (s + 12), oy + i * (s + 12), s));
+  for (let i = 0; i < 90; i++) { g.globalAlpha = Math.random(); g.fillStyle = '#fff'; g.fillRect(Math.random() * W, Math.random() * W * 0.6, 3, 3); }
+  g.globalAlpha = 1;
+  const mx = 790, my = 210, mr = 130;
+  const halo = g.createRadialGradient(mx, my, mr, mx, my, mr * 3.2);
+  halo.addColorStop(0, 'rgba(255,233,184,0.5)'); halo.addColorStop(1, 'rgba(255,154,60,0)');
+  g.fillStyle = halo; g.fillRect(0, 0, W, W);
+  g.fillStyle = '#ffe9b8'; g.beginPath(); g.arc(mx, my, mr, 0, 7); g.fill();
+  g.fillStyle = 'rgba(42,15,82,0.15)';
+  for (const [x, y, r] of [[-40, -30, 30], [35, 20, 22], [-5, 55, 16]]) { g.beginPath(); g.arc(mx + x, my + y, r, 0, 7); g.fill(); }
+  // hill silhouette
+  g.fillStyle = '#140824'; g.beginPath(); g.moveTo(0, W);
+  for (let x = 0; x <= W; x += 8) g.lineTo(x, 760 - Math.sin(x / 200) * 40); g.lineTo(W, W); g.fill();
+  // bats
+  g.fillStyle = '#07030d';
+  const bat = (x, y, s) => { g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + s * 0.5, y - s * 0.6, x + s, y - s * 0.2); g.quadraticCurveTo(x + s * 0.7, y + s * 0.1, x + s * 0.5, y + s * 0.3);
+    g.quadraticCurveTo(x + s * 0.3, y + s * 0.05, x, y + s * 0.3); g.quadraticCurveTo(x - s * 0.3, y + s * 0.05, x - s * 0.5, y + s * 0.3); g.quadraticCurveTo(x - s * 0.7, y + s * 0.1, x - s, y - s * 0.2); g.quadraticCurveTo(x - s * 0.5, y - s * 0.6, x, y); g.fill(); };
+  bat(740, 180, 60); bat(880, 280, 34); bat(620, 300, 28);
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect(x, y, w, h, r); };
+  const tile = (ch, x, y, s) => {
+    g.save(); g.shadowColor = 'rgba(255,138,31,0.85)'; g.shadowBlur = 40;
+    const gr = g.createLinearGradient(0, y, 0, y + s); gr.addColorStop(0, '#ffc58f'); gr.addColorStop(0.45, '#ff8a1f'); gr.addColorStop(1, '#a6590f');
+    g.fillStyle = gr; rr(x, y, s, s, 30); g.fill(); g.restore();
+    g.fillStyle = '#2b0a12'; g.font = `700 ${s * 0.64}px Fredoka`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, x + s / 2, y + s / 2 + 6);
+  };
+  const s = 150, ox = 120, oy = 110;
+  'WOW'.split('').forEach((ch, i) => tile(ch, ox + i * (s + 14), oy, s));
+  'RD'.split('').forEach((ch, i) => tile(ch, ox + s + 14, oy + (i + 1) * (s + 14), s));
   // wheel
-  const cx = 512, cy = 760, R = 210;
-  g.fillStyle = 'rgba(10,20,60,0.2)'; g.beginPath(); g.arc(cx, cy + 10, R, 0, 7); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
-  const pts = [[cx - 110, cy - 50], [cx, cy + 90], [cx + 110, cy - 50]];
-  g.strokeStyle = '#2f6fd6'; g.lineWidth = 34; g.lineCap = 'round'; g.lineJoin = 'round';
-  g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
-  ['W', 'O', 'W'].forEach((ch, i) => { const [x, y] = pts[i]; g.fillStyle = '#2f6fd6'; g.beginPath(); g.arc(x, y, 72, 0, 7); g.fill();
-    g.fillStyle = '#fff'; g.font = '700 100px Fredoka'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, x, y + 6); });
+  const cx = 600, cy = 740, R = 230;
+  const glow = g.createRadialGradient(cx, cy, R * 0.9, cx, cy, R + 70);
+  glow.addColorStop(0, 'rgba(255,138,31,0.5)'); glow.addColorStop(1, 'rgba(255,138,31,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, W, W);
+  const disc = g.createRadialGradient(cx, cy - R * 0.4, 10, cx, cy, R);
+  disc.addColorStop(0, '#46206a'); disc.addColorStop(0.7, '#1a0a2e'); disc.addColorStop(1, '#0a0414');
+  g.fillStyle = disc; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+  g.lineWidth = 10; g.strokeStyle = '#ff8a1f'; g.stroke();
+  const pts = [[cx - 115, cy - 50], [cx, cy + 95], [cx + 115, cy - 50]];
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(255,138,31,0.3)'; g.lineWidth = 80; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
+  g.strokeStyle = '#ff8a1f'; g.lineWidth = 32; g.stroke();
+  ['W', 'O', 'W'].forEach((ch, i) => { const [x, y] = pts[i];
+    g.save(); g.shadowColor = '#ff8a1f'; g.shadowBlur = 40;
+    const og = g.createRadialGradient(x - 20, y - 25, 5, x, y, 72); og.addColorStop(0, '#ffc58f'); og.addColorStop(0.6, '#ff8a1f'); og.addColorStop(1, '#a6590f');
+    g.fillStyle = og; g.beginPath(); g.arc(x, y, 72, 0, 7); g.fill(); g.restore();
+    g.fillStyle = '#2b0a12'; g.font = '700 96px Fredoka'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, x, y + 6); });
   document.title = 'done';
 });
 </script>

@@ -40,10 +40,10 @@ const CARD_IN = 6.4;                    // end card fades in here
     document.body.appendChild(dot);
     const card = document.createElement('div');
     card.id = 'card';
-    card.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:linear-gradient(#2f66b8,#8fc1ec 60%,#dcecf5);opacity:0;pointer-events:none;font-family:Fredoka,sans-serif;font-weight:700';
-    card.innerHTML = '<img src="marketing/icon.png" style="width:210px;height:210px;border-radius:44px;box-shadow:0 10px 30px rgba(0,0,0,0.3)">'
-      + '<div style="font-size:56px;color:#fff;text-shadow:0 4px 0 #1d2b5a,0 6px 16px rgba(0,0,0,0.3);letter-spacing:1px">WORD WOW</div>'
-      + '<div style="font-size:22px;color:#1d2b5a">Swipe. Spell. Wow!</div>';
+    card.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(circle at 50% 38%,#6a2a72 0%,#2a0f52 45%,#0b0520 100%);opacity:0;pointer-events:none;font-family:Fredoka,sans-serif;font-weight:700';
+    card.innerHTML = '<img src="marketing/icon.png" style="width:210px;height:210px;border-radius:44px;box-shadow:0 0 40px rgba(255,138,31,0.55),0 10px 30px rgba(0,0,0,0.5)">'
+      + '<div style="font-family:Creepster,Fredoka,sans-serif;font-weight:400;font-size:66px;color:#ff8a1f;text-shadow:0 0 18px rgba(255,138,31,0.9),0 4px 0 #2b0a12;letter-spacing:2px">WORD WOW</div>'
+      + '<div style="font-size:22px;color:#f7ead2;letter-spacing:1px">Swipe. Spell. Spook!</div>';
     document.body.appendChild(card);
   });
   await p.waitForTimeout(300);
