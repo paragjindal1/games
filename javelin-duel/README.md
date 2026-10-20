@@ -20,6 +20,8 @@ thing people see is the action.
 - A power meter and a short dotted arc show your throw while you aim.
 - **Head** hits do 70 damage, **body** 38 and **legs** 24. Everyone has 100 health.
 - **Headshots heal** the thrower +15 HP (enemies too).
+- A **headshot K.O. beheads** the loser: the head flies off with the javelin
+  still in it and bounces on the ground while the body falls.
 - Javelins that meet in mid-air **clash** and fall.
 - Every K.O. plays in **slow motion**; the next rival rises on a new tower and
   you get 15 HP back.

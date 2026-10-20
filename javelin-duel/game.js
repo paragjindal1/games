@@ -603,8 +603,13 @@
     ctx.fillStyle = col;
     limb(P.hip, fl.k, 8, 6); limb(fl.k, fl.ft, 6, 4.2); limb(fl.ft, { x: fl.ft.x + f * 6, y: fl.ft.y }, 4.6, 3);
     // neck + head
-    limb(P.neck, { x: P.head.x, y: P.head.y + 6 }, 5, 5);
-    drawHead(P.head.x, P.head.y, f, gear, band, col, eye, t, flap);
+    if (F.headless) {
+      ctx.fillStyle = '#b3102a';
+      ctx.beginPath(); ctx.ellipse(P.neck.x, P.neck.y - 1, 3.6, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    } else {
+      limb(P.neck, { x: P.head.x, y: P.head.y + 6 }, 5, 5);
+      drawHead(P.head.x, P.head.y, f, gear, band, col, eye, t, flap);
+    }
     // shoulder pad and front arm
     ctx.fillStyle = col;
     limb(P.sh, P.front.e, 5.6, 4.6); limb(P.front.e, P.front.h, 4.6, 3.6);
@@ -736,7 +741,7 @@
     return {
       score: 0, kills: 0, round: 1, t: 0, javs: [], orb: null, orbT: demo ? 2 : 5, trans: null, over: 0,
       combo: 0, comboT: 0, throwRec: {}, throwId: 0, wind: 0, windParts: [], slow: 0, flash: 0, strikes: [], bolts: [], booms: [],
-      banner: null, throws: 0, demo, tut: !demo && S.tut, hint: null, newBest: false, unlocked: null,
+      banner: null, heads: [], throws: 0, demo, tut: !demo && S.tut, hint: null, newBest: false, unlocked: null,
       stats: { heads: 0, bestCombo: 0, hits: 0, throws: 0, powers: 0 },
       player: null, enemy: null,
     };
@@ -960,6 +965,16 @@
     if (F.state === 'throw') { F.throwT -= dt; if (F.throwT <= 0) F.state = 'idle'; }
     if (F.state !== 'aim') F.aimAng = lerp(F.aimAng, 0.35, Math.min(1, dt * 6));
     F.reload = Math.max(0, F.reload - dt);
+    if (F.headless && F.spurt > 0) {
+      F.spurt -= dt;
+      const P = pose(F), fl = F.fall, s = F.s;
+      const lx = P.neck.x * s, ly = P.neck.y * s, c = Math.cos(fl.rot), sn = Math.sin(fl.rot);
+      const nx = fl.x + lx * c - ly * sn, ny = fl.y + lx * sn + ly * c;
+      if (Math.random() < dt * 60) {
+        const a = fl.rot - Math.PI / 2 + gauss() * 0.35, sp = rand(120, 240) * F.spurt;
+        parts.push({ x: nx, y: ny, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.4, 0.7), max: 0.7, r: rand(1.5, 3.2), col: Math.random() < 0.5 ? '#d1102a' : '#ff3b5c', g: 1 });
+      }
+    }
     if (F.fall && !F.fall.landed) {
       const fl = F.fall;
       fl.vy += GRAV * dt; fl.x += fl.vx * dt; fl.y += fl.vy * dt; fl.rot += fl.vr * dt;
@@ -1004,7 +1019,7 @@
     const dx = Math.cos(j.ang), dy = Math.sin(j.ang);
     blood(j.x, j.y, dx, dy, zone === 'head' ? 26 : 16);
     if (zone === 'head') SFX.head(); else SFX.hit();
-    F.stuck.push({ lx: (j.x + dx * 7 - F.tx) / F.s, ly: (j.y + dy * 7 - feetY(F)) / F.s, ang: j.ang, skin: j.skin });
+    F.stuck.push({ lx: (j.x + dx * 7 - F.tx) / F.s, ly: (j.y + dy * 7 - feetY(F)) / F.s, ang: j.ang, skin: j.skin, zone });
     if (F.stuck.length > 6) F.stuck.shift();
     if (j.fx === 'fire') { F.burn = 3; SFX.burn(); }
     if (j.fx === 'ice') {
@@ -1023,7 +1038,8 @@
     }
     addRage(A, zone === 'head' ? 35 : 22);
     addRage(F, 8);
-    if (!G.demo) {
+    // a lethal headshot shows BEHEADED! instead
+    if (!G.demo && !(zone === 'head' && F.hp - dmg <= 0)) {
       const mult = mine ? comboMult() : 1;
       if (zone === 'head') float(j.x, j.y - 34, mine ? 'HEADSHOT +' + 3 * mult : 'HEADSHOT', 22, UI.gold);
       else float(j.x, j.y - 22, mine ? '+' + mult : '-' + Math.round(dmg), 20, mine ? UI.white : UI.red);
@@ -1078,12 +1094,66 @@
     for (let i = G.booms.length - 1; i >= 0; i--) { G.booms[i].t += dt; if (G.booms[i].t > 0.4) G.booms.splice(i, 1); }
   }
 
+  // A headshot K.O. knocks the head clean off; it flies on with the javelin still in it.
+  function behead(F) {
+    const P = pose(F), s = F.s;
+    const hx = F.tx + P.head.x * s, hy = feetY(F) + P.head.y * s;
+    const last = F.stuck[F.stuck.length - 1];
+    let ang = F.f > 0 ? Math.PI : 0, jav = null;
+    if (last && last.zone === 'head') {
+      F.stuck.pop();
+      ang = last.ang;
+      jav = { lx: last.lx - P.head.x, ly: last.ly - P.head.y, ang: last.ang, skin: last.skin };
+    }
+    const sp = rand(240, 320);
+    G.heads.push({
+      F, x: hx, y: hy, vx: Math.cos(ang) * sp, vy: Math.min(-260, Math.sin(ang) * sp - 260), rot: 0, vr: Math.cos(ang) * 9,
+      jav, landed: false, gear: gearOf(F), band: F.skin.band, f: F.f, s,
+    });
+    F.headless = true; F.spurt = 1.2;
+    const c = { x: F.tx + P.neck.x * s, y: feetY(F) + P.neck.y * s };
+    blood(c.x, c.y, 0, -1, 36);
+    if (!G.demo) float(hx, hy - 40, F.side === 'e' ? 'BEHEADED!' : 'HEAD OFF!', 26, UI.red);
+  }
+
+  function updateHeads(dt) {
+    if (G.heads.length && G.heads.some((H) => H.F.alpha <= 0)) G.heads = G.heads.filter((H) => H.F.alpha > 0);
+    for (const H of G.heads) {
+      if (H.landed) continue;
+      H.vy += GRAV * dt; H.x += H.vx * dt; H.y += H.vy * dt; H.rot += H.vr * dt;
+      if (Math.random() < dt * 40) parts.push({ x: H.x, y: H.y + 8, vx: rand(-30, 30), vy: rand(-20, 40), life: 0.5, max: 0.5, r: rand(1.5, 3), col: '#d1102a', g: 1 });
+      const floor = groundY - 12 * H.s;
+      if (H.y >= floor) {
+        H.y = floor;
+        if (Math.abs(H.vy) > 140) { H.vy *= -0.38; H.vx *= 0.6; H.vr *= 0.6; dust(H.x, groundY, 6); SFX.fall(); }
+        else { H.landed = true; H.vy = 0; }
+      }
+    }
+  }
+
+  function drawHeads() {
+    for (const H of G.heads) {
+      const a = H.F.alpha;
+      if (a <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.translate(H.x, H.y); ctx.rotate(H.rot); ctx.scale(H.s, H.s);
+      if (H.jav) drawJavelin(ctx, H.jav.lx, H.jav.ly, Math.cos(H.jav.ang), Math.sin(H.jav.ang), JAV / H.s, a, H.jav.skin);
+      ctx.globalAlpha = a;
+      drawHead(0, 0, H.f, H.gear, H.band, UI.ink, '#3a3340', 0, 0);
+      ctx.fillStyle = '#b3102a';
+      ctx.beginPath(); ctx.ellipse(0, 10, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
   function die(F, dir, headshot) {
     if (F.dead) return;
     F.hp = 0; F.dead = true; F.state = 'idle'; F.frozen = 0; F.burn = 0; F.shield = 0;
     const y = feetY(F);
     // topple forward off the tower so the body lands in view
     F.fall = { x: F.tx, y, vx: F.f * rand(70, 110), vy: -220, rot: 0, vr: Math.sign(dir || F.f) * 3.2, landed: false };
+    if (headshot) behead(F);
     G.slow = 0.75; G.flash = 0.5;
     G.strikes.length = 0;
     SFX.ko();
@@ -1434,6 +1504,7 @@
     updateJavelins(dt);
     updateStrikes(dt);
     updateTransition(dt);
+    updateHeads(dt);
     updateParts(dt);
     for (const j of G.javs) if (j.tower) { const ny = feetY(j.tower); j.y += ny - j.ty0; j.ty0 = ny; }
     if (G.orb) {
@@ -1667,6 +1738,7 @@
     drawMerlons(E); drawMerlons(P);
     ctx.restore();
     for (const F of [P, E]) if (F.fall) drawFighter(F);
+    drawHeads();
     for (const F of [P, E]) if (F.state === 'aim' && !F.dead && (F.side === 'e' || G.demo)) meter(F, F.aimPow);
     // lightning warnings
     for (const s of G.strikes) {
