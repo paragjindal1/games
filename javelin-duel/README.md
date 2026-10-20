@@ -2,9 +2,10 @@
 
 A tower-to-tower javelin fight built as a **Snapchat Web Lens**.
 
-You stand on a castle tower and a rival stands on another. Drag back to aim,
-release to throw, and knock them off before they knock you off. Every win
-brings a new, sharper rival on a new tower.
+Black stickman silhouettes duel across glowing sunset skies. Drag back to aim,
+release to throw, and knock your rival off their tower before they knock you
+off yours. The title screen runs a live AI duel behind the menu, so the first
+thing people see is the action.
 
 ## How to play
 
@@ -12,41 +13,60 @@ brings a new, sharper rival on a new tower.
 |---|---|
 | Aim and throw | **Drag back** anywhere on the screen and release. The farther you pull, the harder you throw. |
 | Power-ups | Hit a floating **orb** with a javelin |
-| Pause | Pause button, `Esc` or `P` |
+| Pause | Pause button (under the score), `Esc` or `P` |
 | Start / retry | Tap, or `Space` / `Enter` |
 | Change skin | Arrows on the title screen (or ←/→) |
 
-- A power meter (green → red) and a short dotted arc show your throw while you aim.
+- A power meter and a short dotted arc show your throw while you aim.
 - **Head** hits do 70 damage, **body** 38 and **legs** 24. Everyone has 100 health.
-- Javelins that meet in mid-air **clash** and fall harmlessly.
-- Every K.O. plays in **slow motion**, and the next rival rises on a new tower.
-  You get 15 health back between rounds.
+- **Headshots heal** the thrower +15 HP (enemies too).
+- Javelins that meet in mid-air **clash** and fall.
+- Every K.O. plays in **slow motion**; the next rival rises on a new tower and
+  you get 15 HP back.
 
-### Twists
+### ULTRA javelin
 
-| Twist | What it does |
+Every hit fills the gold **ULTRA** bar under your health (headshots fill it
+faster, and getting hit adds a little). When it is full, your next throw is
+an ULTRA: a huge glowing javelin with half the gravity and double damage that
+smashes through shields and through enemy javelins. **Enemies charge ULTRA
+too**; you get an "ULTRA INCOMING!" warning before they throw it.
+
+### Power-up orbs (both sides can grab them)
+
+| Orb | Effect |
 |---|---|
-| **Heal orb** | +35 health. The enemy can grab it too. |
-| **Fire orb** | Next 2 throws do 1.5× damage and set the rival on fire |
-| **Ice orb** | Next throw freezes the rival for 2.6 s, so they can't throw |
-| **Triple orb** | Next throw fires 3 javelins in a spread |
-| **Shield orb** | A bubble blocks the next javelin that would hit you |
-| **Wind** (round 3+) | Pushes every javelin sideways. Streaks and a HUD chip show its direction. |
-| **Moving tower** (round 4+) | The rival's tower rides up and down |
-| **Champion** (every 5th round) | Horned Warlord with 150 health who hits harder |
+| **Heal** | +35 HP |
+| **Fire** | Next 2 throws do 1.5× damage and set the target on fire |
+| **Ice** | Next throw freezes the target for 2.4 s (a frozen player can't throw) |
+| **Triple** | Next throw fires 3 javelins in a spread |
+| **Shield** | A bubble blocks the next javelin, bomb or lightning |
+| **Lightning** | After a short warning, a bolt hits the other fighter for 22 |
+| **Bomb** | Next javelin explodes on impact and splashes nearby damage |
+| **Gold** | +25 score (if the enemy hits it, it's stolen) |
 
-If the enemy hits a power-up orb, it is destroyed.
+The enemy AI shoots at orbs on purpose, and its power-ups show under its
+health bar and above its head.
+
+### Rounds
+
+| Twist | When |
+|---|---|
+| **Wind** | From round 3. Pushes every javelin; streaks and a HUD chip show its direction. |
+| **Moving tower** | From round 4. The rival's tower rides up and down. |
+| **Boss** | Every 5th round: a horned Warlord with 150 HP who hits harder |
+| **New arena** | Every 5 rounds: Sunset Keep → Neon Night → Blood Moon → Frost Peak |
 
 ### Score, combos and skins
 
-- Body/leg hit +1, headshot +3, K.O. +10 (+5 more for a headshot K.O.).
-- Hits in a row build a **combo**. From the 3rd hit, points are multiplied
+- Body/leg hit +1, headshot +3, lightning/bomb +2, K.O. +10 (+5 for a
+  headshot K.O.), Gold orb +25.
+- Hits in a row build a **combo**; from the 3rd hit points are multiplied
   (×2, ×3 … up to ×5). A throw that misses everything resets it.
-- Rivals throw faster and more accurately each round (about 35% of throws hit
-  at the start, up to about 80% later).
+- Rivals throw faster and more accurately each round.
 - Reaching later rounds unlocks skins: **Crimson** (round 3), **Frost** (6),
-  **Gold** (10) and **Inferno** (15). The game-over card shows how close the
-  next one is.
+  **Gold** (10) and **Inferno** (15). The game-over card shows your score,
+  stats (round, headshots, best combo, power-ups) and how close the next skin is.
 - The first game has a short hands-on tutorial, and the enemy waits until you
   have thrown once.
 
