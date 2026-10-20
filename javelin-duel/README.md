@@ -67,6 +67,10 @@ health bar and above its head.
 - Reaching later rounds unlocks skins: **Crimson** (round 3), **Frost** (6),
   **Gold** (10) and **Inferno** (15). The game-over card shows your score,
   stats (round, headshots, best combo, power-ups) and how close the next skin is.
+- Fighters are shaped ninja-warrior silhouettes with a glowing eye, a scarf,
+  belt and shoulder pad in their accent colour, and headgear: each skin has its
+  own (hood, topknot, straw hat, bandana), rivals get a random one, and bosses
+  wear a horned helmet and cape.
 - The first game has a short hands-on tutorial, and the enemy waits until you
   have thrown once.
 

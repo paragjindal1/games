@@ -32,11 +32,11 @@
   const PLAYER_X = 74;
 
   const SKINS = [
-    { id: 'shadow', name: 'SHADOW', round: 0, band: '#e8e0f0', jav: '#07040c', tip: '#cfc6dc' },
-    { id: 'crimson', name: 'CRIMSON', round: 3, band: '#ff3b5c', jav: '#1c0710', tip: '#ff6b84', trail: '#ff3b5c' },
-    { id: 'frost', name: 'FROST', round: 6, band: '#35d6ff', jav: '#071a24', tip: '#a8eeff', trail: '#7fe6ff' },
-    { id: 'gold', name: 'GOLD', round: 10, band: '#ffcc33', jav: '#241a04', tip: '#ffe27a', trail: '#ffd84a' },
-    { id: 'inferno', name: 'INFERNO', round: 15, band: '#ff7a1a', jav: '#200a02', tip: '#ffb03a', trail: '#ff8a2a' },
+    { id: 'shadow', name: 'SHADOW', round: 0, gear: 'hood', band: '#e8e0f0', jav: '#07040c', tip: '#cfc6dc' },
+    { id: 'crimson', name: 'CRIMSON', round: 3, gear: 'topknot', band: '#ff3b5c', jav: '#1c0710', tip: '#ff6b84', trail: '#ff3b5c' },
+    { id: 'frost', name: 'FROST', round: 6, gear: 'hood', band: '#35d6ff', jav: '#071a24', tip: '#a8eeff', trail: '#7fe6ff' },
+    { id: 'gold', name: 'GOLD', round: 10, gear: 'kasa', band: '#ffcc33', jav: '#241a04', tip: '#ffe27a', trail: '#ffd84a' },
+    { id: 'inferno', name: 'INFERNO', round: 15, gear: 'bandana', band: '#ff7a1a', jav: '#200a02', tip: '#ffb03a', trail: '#ff8a2a' },
   ];
   const ENEMY_SKIN = { band: '#ff3b5c', jav: '#07040c', tip: '#9a8fa8' };
   const CHAMP_SKIN = { band: '#ffcc33', jav: '#07040c', tip: '#ff3b5c' };
@@ -397,7 +397,7 @@
     return {
       side, f: side === 'p' ? 1 : -1, tx, th, off: opts.off || 0, by: 0, bob: opts.bob || null,
       hp: opts.hp || 100, maxHp: opts.hp || 100, hpLag: opts.hp || 100, s: opts.s || FS,
-      skin: opts.skin || ENEMY_SKIN, champ: !!opts.champ, name: opts.name || 'YOU',
+      skin: opts.skin || ENEMY_SKIN, champ: !!opts.champ, name: opts.name || 'YOU', gear: opts.gear || null,
       state: 'idle', aimAng: 0.35, aimPow: 0, reload: 0, throwT: 0, hitT: 0, flash: 0,
       stuck: [], dead: false, fall: null, alpha: 1, cool: 1.5, aimT: 0, aimDur: 0.8, plan: null,
       breath: Math.random() * 6, frozen: 0, burn: 0, shield: 0, power: null, rage: 0, rageFlash: 0,
@@ -472,6 +472,64 @@
     return t === 'fire' || t === 'ice' || t === 'bomb' ? t : null;
   }
 
+  // Gear sits on the head: hood, kasa (straw hat), topknot, bandana or horns.
+  const gearOf = (F) => (F.champ ? 'horns' : F.gear || F.skin.gear || 'bandana');
+
+  // A tapered limb from a (width w1) to b (width w2) with rounded joints.
+  function limb(a, b, w1, w2) {
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    ctx.beginPath();
+    ctx.moveTo(a.x + nx * w1 / 2, a.y + ny * w1 / 2); ctx.lineTo(b.x + nx * w2 / 2, b.y + ny * w2 / 2);
+    ctx.lineTo(b.x - nx * w2 / 2, b.y - ny * w2 / 2); ctx.lineTo(a.x - nx * w1 / 2, a.y - ny * w1 / 2);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(a.x, a.y, w1 / 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y, w2 / 2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Head with its gear, facing f. Shared by the fighters and the HUD portraits.
+  function drawHead(hx, hy, f, gear, band, col, eye, t, flap) {
+    ctx.fillStyle = col;
+    if (gear === 'hood') {
+      ctx.beginPath(); ctx.arc(hx - f, hy - 1, 12.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(hx - f * 6, hy - 10); ctx.quadraticCurveTo(hx - f * 22, hy - 6, hx - f * 24, hy + 6 + Math.sin(t * 5) * 2 * flap); ctx.lineTo(hx - f * 8, hy + 8); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(hx, hy, 10.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // mask band across the eyes
+    ctx.strokeStyle = band; ctx.lineWidth = 3.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hx - f * 6, hy - 1.5); ctx.lineTo(hx + f * 10, hy - 2.5); ctx.stroke();
+    ctx.fillStyle = eye;
+    ctx.shadowColor = eye; ctx.shadowBlur = 8;
+    ctx.beginPath(); ctx.ellipse(hx + f * 5.5, hy - 2.2, 2.6, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = col; ctx.strokeStyle = band;
+    if (gear === 'kasa') {
+      ctx.beginPath(); ctx.moveTo(hx - 20, hy - 6); ctx.quadraticCurveTo(hx, hy - 26, hx + 20, hy - 6); ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(hx - 20, hy - 6); ctx.lineTo(hx + 20, hy - 6); ctx.stroke();
+    } else if (gear === 'topknot') {
+      ctx.beginPath(); ctx.arc(hx - f * 4, hy - 12, 4.8, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(hx - f * 8, hy - 11); ctx.lineTo(hx, hy - 13); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx - f * 7, hy - 13); ctx.quadraticCurveTo(hx - f * 14, hy - 14 + Math.sin(t * 6) * 2 * flap, hx - f * 17, hy - 8); ctx.stroke();
+    } else if (gear === 'bandana') {
+      ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.moveTo(hx - f * 9, hy - 5); ctx.lineTo(hx + f * 9, hy - 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx - f * 8, hy - 5);
+      ctx.quadraticCurveTo(hx - f * 16, hy - 4 + Math.sin(t * 7) * 3 * flap, hx - f * 22, hy + 1 + Math.sin(t * 7 + 1) * 4 * flap);
+      ctx.moveTo(hx - f * 8, hy - 4);
+      ctx.quadraticCurveTo(hx - f * 14, hy + 2 + Math.sin(t * 6) * 2 * flap, hx - f * 18, hy + 7 + Math.sin(t * 6 + 2) * 3 * flap);
+      ctx.stroke();
+    } else if (gear === 'horns') {
+      ctx.beginPath(); ctx.arc(hx, hy - 1, 12.5, Math.PI, 0); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx - 10, hy - 6); ctx.quadraticCurveTo(hx - 22, hy - 14, hx - 17, hy - 27);
+      ctx.quadraticCurveTo(hx - 13, hy - 15, hx - 4, hy - 10);
+      ctx.moveTo(hx + 10, hy - 6); ctx.quadraticCurveTo(hx + 22, hy - 14, hx + 17, hy - 27);
+      ctx.quadraticCurveTo(hx + 13, hy - 15, hx + 4, hy - 10);
+      ctx.fill();
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(hx, hy - 1, 12.5, Math.PI, 0); ctx.stroke();
+    }
+  }
+
   function drawFighter(F) {
     if (F.alpha <= 0) return;
     const P = pose(F);
@@ -491,50 +549,75 @@
       drawJavelin(ctx, j.lx, j.ly, Math.cos(j.ang), Math.sin(j.ang), JAV / F.s, F.alpha, j.skin);
       ctx.globalAlpha = F.alpha;
     }
+    const f = F.f, t = F.breath, flap = F.frozen > 0 ? 0 : 1;
     const col = F.flash > 0 ? '#ff2a4a' : F.frozen > 0 ? '#1d5f86' : UI.ink;
-    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const t = F.breath;
-    ctx.strokeStyle = F.skin.band; ctx.lineWidth = 2.6;
-    const hb = { x: P.head.x - F.f * 8, y: P.head.y - 3 };
-    const flap = F.frozen > 0 ? 0 : 1;
-    ctx.beginPath(); ctx.moveTo(hb.x, hb.y);
-    ctx.quadraticCurveTo(hb.x - F.f * 8, hb.y + Math.sin(t * 7) * 3 * flap, hb.x - F.f * 16, hb.y + 4 + Math.sin(t * 7 + 1) * 4 * flap);
-    ctx.moveTo(hb.x, hb.y + 1);
-    ctx.quadraticCurveTo(hb.x - F.f * 7, hb.y + 5 + Math.sin(t * 6) * 2 * flap, hb.x - F.f * 13, hb.y + 10 + Math.sin(t * 6 + 2) * 3 * flap);
-    ctx.stroke();
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    for (const L of P.legs) { ctx.moveTo(P.hip.x, P.hip.y); ctx.lineTo(L.k.x, L.k.y); ctx.lineTo(L.ft.x, L.ft.y); }
-    ctx.stroke();
-    if (P.jav) drawJavelin(ctx, P.jav.gx + P.jav.dx * JAV * 0.6 / F.s, P.jav.gy + P.jav.dy * JAV * 0.6 / F.s, P.jav.dx, P.jav.dy, JAV / F.s, F.alpha, F.skin, heldFx(F));
-    ctx.globalAlpha = F.alpha;
-    ctx.strokeStyle = col; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(P.sh.x, P.sh.y); ctx.lineTo(P.back.e.x, P.back.e.y); ctx.lineTo(P.back.h.x, P.back.h.y); ctx.stroke();
-    ctx.lineWidth = 9;
-    ctx.beginPath(); ctx.moveTo(P.hip.x, P.hip.y); ctx.lineTo(P.neck.x, P.neck.y); ctx.stroke();
-    ctx.beginPath(); ctx.arc(P.head.x, P.head.y, 10.5, 0, Math.PI * 2); ctx.fill();
-    if (F.champ) {
-      ctx.beginPath(); ctx.arc(P.head.x, P.head.y - 1, 12, Math.PI, 0); ctx.fill();
+    const band = F.skin.band, eye = F.side === 'p' ? UI.cyan : UI.red;
+    const gear = gearOf(F);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // spine frame
+    const sx = P.neck.x - P.hip.x, sy = P.neck.y - P.hip.y, sl = Math.hypot(sx, sy) || 1;
+    const nx = -sy / sl, ny = sx / sl;   // perpendicular to the spine
+    // champion cape, behind everything
+    if (gear === 'horns') {
+      ctx.fillStyle = '#5a0a18';
       ctx.beginPath();
-      ctx.moveTo(P.head.x - 10, P.head.y - 6); ctx.quadraticCurveTo(P.head.x - 20, P.head.y - 14, P.head.x - 16, P.head.y - 24);
-      ctx.quadraticCurveTo(P.head.x - 12, P.head.y - 14, P.head.x - 4, P.head.y - 10);
-      ctx.moveTo(P.head.x + 10, P.head.y - 6); ctx.quadraticCurveTo(P.head.x + 20, P.head.y - 14, P.head.x + 16, P.head.y - 24);
-      ctx.quadraticCurveTo(P.head.x + 12, P.head.y - 14, P.head.x + 4, P.head.y - 10);
-      ctx.fill();
+      ctx.moveTo(P.neck.x + f * 3, P.neck.y + 2);
+      ctx.quadraticCurveTo(P.neck.x - f * 20, P.neck.y + 10, P.hip.x - f * (24 + Math.sin(t * 4) * 3 * flap), P.hip.y + 22);
+      ctx.lineTo(P.hip.x - f * 6, P.hip.y + 14);
+      ctx.closePath(); ctx.fill();
     }
-    ctx.strokeStyle = F.skin.band; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(P.head.x - 10, P.head.y - 3); ctx.lineTo(P.head.x + 10, P.head.y - 4); ctx.stroke();
-    // glowing eye
-    ctx.fillStyle = F.side === 'p' ? UI.cyan : UI.red;
-    ctx.beginPath(); ctx.arc(P.head.x + F.f * 5, P.head.y + 1, 1.8, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = col; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(P.sh.x, P.sh.y); ctx.lineTo(P.front.e.x, P.front.e.y); ctx.lineTo(P.front.h.x, P.front.h.y); ctx.stroke();
+    // scarf tails
+    const anc = { x: P.neck.x - f * 3, y: P.neck.y + 2 };
+    ctx.strokeStyle = band;
+    for (const off of [0, 1]) {
+      let px = anc.x, py = anc.y + off * 2;
+      for (let i = 1; i <= 6; i++) {
+        const qx = anc.x - f * i * 5.2, qy = anc.y + off * 2 + i * (1.8 + off * 0.8) + Math.sin(t * 8 - i * 0.9 + off) * i * 0.7 * flap;
+        ctx.lineWidth = 4.2 - i * 0.55;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(qx, qy); ctx.stroke();
+        px = qx; py = qy;
+      }
+    }
+    ctx.fillStyle = col;
+    // back leg, back arm
+    const [bl, fl] = P.legs;
+    limb(P.hip, bl.k, 8, 6); limb(bl.k, bl.ft, 6, 4.2); limb(bl.ft, { x: bl.ft.x + f * 6, y: bl.ft.y }, 4.6, 3);
+    if (P.jav) drawJavelin(ctx, P.jav.gx + P.jav.dx * JAV * 0.6 / F.s, P.jav.gy + P.jav.dy * JAV * 0.6 / F.s, P.jav.dx, P.jav.dy, JAV / F.s, F.alpha, F.skin, heldFx(F));
+    ctx.globalAlpha = F.alpha; ctx.fillStyle = col;
+    limb(P.sh, P.back.e, 5.6, 4.6); limb(P.back.e, P.back.h, 4.6, 3.6);
+    ctx.beginPath(); ctx.arc(P.back.h.x, P.back.h.y, 3.4, 0, Math.PI * 2); ctx.fill();
+    // torso: broad shoulders, narrow waist
+    ctx.beginPath();
+    ctx.moveTo(P.neck.x + nx * 9.5, P.neck.y + ny * 9.5 + 2);
+    ctx.quadraticCurveTo(P.neck.x + f * 6, P.neck.y - 2, P.neck.x - nx * 9.5, P.neck.y - ny * 9.5 + 2);
+    ctx.lineTo(P.hip.x - nx * 5.5, P.hip.y - ny * 5.5);
+    ctx.lineTo(P.hip.x + nx * 5.5, P.hip.y + ny * 5.5);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(P.hip.x, P.hip.y, 6, 0, Math.PI * 2); ctx.fill();
+    // belt
+    const bx = lerp(P.hip.x, P.neck.x, 0.14), by = lerp(P.hip.y, P.neck.y, 0.14);
+    ctx.strokeStyle = band; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(bx + nx * 6.4, by + ny * 6.4); ctx.lineTo(bx - nx * 6.4, by - ny * 6.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx - f * 2, by); ctx.lineTo(bx - f * 7, by + 7 + Math.sin(t * 7) * flap); ctx.stroke();
+    // front leg
+    ctx.fillStyle = col;
+    limb(P.hip, fl.k, 8, 6); limb(fl.k, fl.ft, 6, 4.2); limb(fl.ft, { x: fl.ft.x + f * 6, y: fl.ft.y }, 4.6, 3);
+    // neck + head
+    limb(P.neck, { x: P.head.x, y: P.head.y + 6 }, 5, 5);
+    drawHead(P.head.x, P.head.y, f, gear, band, col, eye, t, flap);
+    // shoulder pad and front arm
+    ctx.fillStyle = col;
+    limb(P.sh, P.front.e, 5.6, 4.6); limb(P.front.e, P.front.h, 4.6, 3.6);
+    ctx.beginPath(); ctx.arc(P.front.h.x, P.front.h.y, 3.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(P.sh.x + f * 2, P.sh.y + 1, 6.5, 4.5, f * 0.3, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = band; ctx.lineWidth = 1.6; ctx.globalAlpha = F.alpha * 0.85;
+    ctx.beginPath(); ctx.ellipse(P.sh.x + f * 2, P.sh.y + 1, 6.5, 4.5, f * 0.3, Math.PI, 0); ctx.stroke();
+    ctx.globalAlpha = F.alpha;
     if (F.frozen > 0 && !F.fall) {
       ctx.globalAlpha = F.alpha * Math.min(1, F.frozen * 3) * 0.5;
-      ctx.fillStyle = '#bfeeff'; rr(-26, -88, 52, 90, 8); ctx.fill();
+      ctx.fillStyle = '#bfeeff'; rr(-26, -92, 52, 94, 8); ctx.fill();
       ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-16, -78); ctx.lineTo(-6, -60); ctx.moveTo(12, -40); ctx.lineTo(18, -26); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-16, -82); ctx.lineTo(-6, -64); ctx.moveTo(12, -40); ctx.lineTo(18, -26); ctx.stroke();
     }
     ctx.restore();
     if (F.shield > 0 && !F.fall) {
@@ -643,7 +726,7 @@
     }
     const F = makeFighter('e', rand(375, 470), th, {
       off, hp: champ ? 150 : 100, s: champ ? FS * 1.12 : FS, champ, bob,
-      skin: champ ? CHAMP_SKIN : ENEMY_SKIN, name: champ ? 'WARLORD' : pick(NAMES),
+      skin: champ ? CHAMP_SKIN : ENEMY_SKIN, name: champ ? 'WARLORD' : pick(NAMES), gear: pick(['kasa', 'topknot', 'bandana', 'hood']),
     });
     F.cool = 1.3 + (round === 1 ? 1 : 0);
     return F;
@@ -664,7 +747,7 @@
     G = freshRun(true);
     viewSkin = SKINS.findIndex((s) => s.id === S.skin);
     G.player = makeFighter('p', PLAYER_X, (groundY - ST) * 0.27, { skin: skinById(S.skin) });
-    G.enemy = makeFighter('e', 450, (groundY - ST) * 0.34, { name: 'RONIN' });
+    G.enemy = makeFighter('e', 450, (groundY - ST) * 0.34, { name: 'RONIN', gear: 'kasa' });
     G.player.cool = 0.6; G.enemy.cool = 1.4;
     parts.length = 0; floaters.length = 0;
   }
@@ -1715,14 +1798,13 @@
     const g = ctx.createLinearGradient(0, y - r, 0, y + r);
     g.addColorStop(0, F.side === 'p' ? '#1d4a7a' : '#6a1530'); g.addColorStop(1, UI.navy);
     ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-    // stickman bust
+    // bust with the fighter's own head gear
+    const f = F.side === 'p' ? 1 : -1;
     ctx.fillStyle = UI.ink;
-    ctx.beginPath(); ctx.arc(x, y - 2, r * 0.42, 0, Math.PI * 2); ctx.fill();
-    ctx.fillRect(x - r * 0.18, y + r * 0.3, r * 0.36, r);
-    if (F.champ) { ctx.beginPath(); ctx.moveTo(x - r * 0.4, y - r * 0.3); ctx.lineTo(x - r * 0.6, y - r * 0.85); ctx.lineTo(x - r * 0.2, y - r * 0.4); ctx.moveTo(x + r * 0.4, y - r * 0.3); ctx.lineTo(x + r * 0.6, y - r * 0.85); ctx.lineTo(x + r * 0.2, y - r * 0.4); ctx.fill(); }
-    ctx.strokeStyle = F.skin.band; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(x - r * 0.42, y - 5); ctx.lineTo(x + r * 0.42, y - 6); ctx.stroke();
-    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + (F.side === 'p' ? 4 : -4), y - 1, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x - r * 0.75, y + r); ctx.quadraticCurveTo(x, y + r * 0.2, x + r * 0.75, y + r); ctx.fill();
+    ctx.save(); ctx.translate(x, y + 2); ctx.scale(r / 26 * 1.1, r / 26 * 1.1);
+    drawHead(0, 0, f, gearOf(F), F.skin.band, UI.ink, col, titleT, 0);
+    ctx.restore();
     ctx.restore();
   }
 
