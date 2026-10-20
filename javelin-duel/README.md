@@ -11,20 +11,44 @@ brings a new, sharper rival on a new tower.
 | Action | Control |
 |---|---|
 | Aim and throw | **Drag back** anywhere on the screen and release. The farther you pull, the harder you throw. |
-| Heal | Hit the floating **heart** with a javelin (+35 health) |
+| Power-ups | Hit a floating **orb** with a javelin |
 | Pause | Pause button, `Esc` or `P` |
 | Start / retry | Tap, or `Space` / `Enter` |
+| Change skin | Arrows on the title screen (or ←/→) |
 
 - A power meter (green → red) and a short dotted arc show your throw while you aim.
 - **Head** hits do 70 damage, **body** 38 and **legs** 24. Everyone has 100 health.
 - Javelins that meet in mid-air **clash** and fall harmlessly.
-- The enemy can shoot the heart too.
-- Each rival you take down is **+1 score**. Every 5th rival is a horned
-  **Champion** with 150 health who hits harder.
-- Rivals throw faster and more accurately as your score climbs (about 35% of
-  throws hit at the start, up to about 80% later).
-- The first game has a short hands-on tutorial (an animated hand shows the
-  drag). The enemy waits until you have thrown once.
+- Every K.O. plays in **slow motion**, and the next rival rises on a new tower.
+  You get 15 health back between rounds.
+
+### Twists
+
+| Twist | What it does |
+|---|---|
+| **Heal orb** | +35 health. The enemy can grab it too. |
+| **Fire orb** | Next 2 throws do 1.5× damage and set the rival on fire |
+| **Ice orb** | Next throw freezes the rival for 2.6 s, so they can't throw |
+| **Triple orb** | Next throw fires 3 javelins in a spread |
+| **Shield orb** | A bubble blocks the next javelin that would hit you |
+| **Wind** (round 3+) | Pushes every javelin sideways. Streaks and a HUD chip show its direction. |
+| **Moving tower** (round 4+) | The rival's tower rides up and down |
+| **Champion** (every 5th round) | Horned Warlord with 150 health who hits harder |
+
+If the enemy hits a power-up orb, it is destroyed.
+
+### Score, combos and skins
+
+- Body/leg hit +1, headshot +3, K.O. +10 (+5 more for a headshot K.O.).
+- Hits in a row build a **combo**. From the 3rd hit, points are multiplied
+  (×2, ×3 … up to ×5). A throw that misses everything resets it.
+- Rivals throw faster and more accurately each round (about 35% of throws hit
+  at the start, up to about 80% later).
+- Reaching later rounds unlocks skins: **Crimson** (round 3), **Frost** (6),
+  **Gold** (10) and **Inferno** (15). The game-over card shows how close the
+  next one is.
+- The first game has a short hands-on tutorial, and the enemy waits until you
+  have thrown once.
 
 ## Web Lens requirements covered
 
@@ -37,14 +61,16 @@ brings a new, sharper rival on a new tower.
   the zip and loads before `game.js`. The game calls `snapchat.init()` once
   behind the loading screen and checks every capability with
   `isSupported()`, so it still works without them.
-- **Storage**: best score, sound setting and tutorial state are saved through
-  `snapchat.storage` (key `save`).
+- **Storage**: best score, best round, unlocked/selected skin, sound setting
+  and tutorial state are saved through `snapchat.storage` (key `save`).
 - **Leaderboards**: each run's score is submitted as an integer with
   `leaderboards.submitScore({ score })`. The trophy buttons open Snapchat's
   panel and only appear when the capability is supported.
-- **Safe zone**: all UI stays inside `CFG.SAFE_TOP` / `CFG.SAFE_BOTTOM`
-  (10% of the screen height each, or the device's safe-area insets if
-  larger), set at the top of `game.js`. Add `#safe` to the URL to see the zone.
+- **Safe zone**: the HUD, buttons, towers and fighters all stay inside
+  `CFG.SAFE_TOP` / `CFG.SAFE_BOTTOM` (12% of the screen height at the top and
+  16% at the bottom, or the device's safe-area insets if larger), set at the
+  top of `game.js`. Only the sky and the ground wall reach under Snapchat's
+  controls. Add `#safe` to the URL to see the zone.
 - Portrait layout that scales to tall phones (towers get taller) and centres
   on wide screens. Touch, mouse and keyboard all work. Audio starts on the
   first tap, and the game pauses when the app goes to the background.
