@@ -107,9 +107,11 @@ health bar and above its head.
 |---|---|
 | `release/javelin-duel.zip` | The Lens. `index.html` is at the zip root. Upload this. |
 | `marketing/icon.png` | Lens icon, 1024×1024 (`icon-512.png` is 512×512) |
+| `marketing/preview.mp4` | Preview video: 8 s, 1080×1920, 30 fps, H.264 + AAC sound. A fire-orb grab, a mid-air clash, an ULTRA headshot that beheads the rival in slow motion, then the title card. |
 
 1. In **My Lenses**, create a Web Lens and upload `release/javelin-duel.zip`.
-2. Add `marketing/icon.png` as the Lens icon.
+2. Add `marketing/icon.png` as the Lens icon and `marketing/preview.mp4` as the
+   preview video.
 3. Turn on the leaderboard for the Lens, or the trophy buttons stay hidden.
 
 ## Build and test
@@ -120,4 +122,5 @@ health bar and above its head.
 
 Serve the folder with any static server (the font needs `http://`). Outside
 Snapchat the API uses its desktop stub, so saves only last until you reload.
-`#debug` exposes a `window.__jd` test hook.
+`#debug` exposes a `window.__jd` test hook. `scripts/capture-preview.js`
+re-records the preview video (see the comment at its top).

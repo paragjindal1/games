@@ -71,6 +71,8 @@
   const snap = window.snapchat || null;
   const SHOW_SAFE = /safe/.test(location.hash);
   const DEBUG = /debug/.test(location.hash);
+  // #debug-capture steps frames by hand and renders sound offline, for the preview video
+  const CAPTURE = /capture/.test(location.hash);
   const FD = '"Russo One", "Arial Black", Impact, system-ui, sans-serif';
 
   let dpr = 1, scale = 1, offX = 0, VW = LW, LH = 960, ST = 0, SB = 0, groundY = 800;
@@ -211,6 +213,8 @@
 
   // ================================================================ audio
   let audio = null, master = null, noiseBuf = null;
+  let clock = 0;               // extra audio time while capturing offline
+  const now = () => audio.currentTime + clock;
   function initAudio() {
     if (audio) { if (audio.state === 'suspended') audio.resume().catch(() => {}); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -232,7 +236,7 @@
   const quiet = () => !audio || S.muted || (G && G.demo);
   function tone(freq, dur, type = 'sine', vol = 0.3, slide = 0, delay = 0) {
     if (quiet()) return;
-    const t = audio.currentTime + delay;
+    const t = now() + delay;
     const o = audio.createOscillator(), g = audio.createGain();
     o.type = type;
     o.frequency.setValueAtTime(freq, t);
@@ -245,7 +249,7 @@
   }
   function noise(dur, vol = 0.3, f0 = 1200, f1 = 0, q = 1, type = 'bandpass', delay = 0) {
     if (quiet()) return;
-    const t = audio.currentTime + delay;
+    const t = now() + delay;
     const s = audio.createBufferSource(); s.buffer = noiseBuf;
     const f = audio.createBiquadFilter(); f.type = type; f.Q.value = q;
     f.frequency.setValueAtTime(f0, t);
@@ -2211,11 +2215,42 @@
   window.addEventListener('resize', resize);
   if (DEBUG) {
     window.__jd = {
+      get audio() { return audio; }, playerThrow, launch,
       get G() { return G; }, get screen() { return screen; }, S: () => S, get buttons() { return buttons; },
       newGame, throwAt(angDeg, pow) { G.player.reload = 0; playerThrow(angDeg * Math.PI / 180, pow); },
       handWorld, zones, feetY, uiAction, spawnOrb, roundMods, heightAt, setArena, claimOrb, step: (dt) => update(dt),
     };
   }
+  if (DEBUG && CAPTURE) {
+    Object.assign(window.__jd, {
+      frame(dt) { clock += dt; update(dt); draw(); },
+      offlineAudio(sec) {
+        audio = new OfflineAudioContext(2, Math.ceil(48000 * sec), 48000);
+        master = audio.createGain(); master.gain.value = 0.8; master.connect(audio.destination);
+        noiseBuf = audio.createBuffer(1, 48000, 48000);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      },
+      async renderWav() {
+        const buf = await audio.startRendering();
+        const n = buf.length, L = buf.getChannelData(0), R = buf.getChannelData(1);
+        const out = new DataView(new ArrayBuffer(44 + n * 4));
+        const str = (o, t) => { for (let i = 0; i < t.length; i++) out.setUint8(o + i, t.charCodeAt(i)); };
+        str(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); str(8, 'WAVEfmt ');
+        out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true);
+        out.setUint32(24, 48000, true); out.setUint32(28, 48000 * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true);
+        str(36, 'data'); out.setUint32(40, n * 4, true);
+        for (let i = 0; i < n; i++) {
+          out.setInt16(44 + i * 4, clamp(L[i], -1, 1) * 32767, true);
+          out.setInt16(46 + i * 4, clamp(R[i], -1, 1) * 32767, true);
+        }
+        const bytes = new Uint8Array(out.buffer);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        return btoa(bin);
+      },
+    });
+  }
   boot();
-  requestAnimationFrame(frame);
+  if (!CAPTURE) requestAnimationFrame(frame);
 })();
