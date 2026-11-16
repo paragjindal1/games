@@ -1,0 +1,88 @@
+# Bridge War
+
+A squad runner-shooter built as a **Snapchat Web Lens**.
+
+Your soldiers charge down a suspension bridge and fire on their own. Drag left
+and right to aim, shoot gates to raise their number before you run through
+them, mow down the red crowd, dodge rolling tires and beat the boss at the end
+of the bridge. Coins buy upgrades between levels.
+
+## How to play
+
+| Action | Control |
+|---|---|
+| Start a level | Drag (or tap) on the bridge, or press an arrow key |
+| Move the squad | **Drag left / right** anywhere, or ← → / A D |
+| Buy an upgrade | Tap a card on the level screen |
+| Pause | Pause button, `Esc` or `P` |
+
+- **Shooting is automatic.** Whatever is in front of the squad gets hit.
+- **Gates** add or remove soldiers when you run through them. Every bullet
+  that hits a gate raises its number (`-9` → `-4` → `+3` …), so park in front
+  of the lane you want and fix it before you arrive. Each gate has a cap and
+  shows `MAX` when it is full. The higher it gets, the slower it grows.
+- **Red soldiers** charge the squad. Each one that reaches you takes a soldier
+  with it. Each kill drops coins.
+- **Tires** (from level 2) roll down a lane and wipe out a third of the squad.
+  Shoot them down or step aside.
+- **Boss**: at the end of the bridge the squad stops and a horned giant walks
+  in. Kill him before he reaches you, or he eats the squad one by one.
+- Lose every soldier and the run ends. You keep the coins you collected.
+
+### Upgrades
+
+| Card | Effect per level |
+|---|---|
+| **Fire Rate** | +12% shots per soldier |
+| **Damage** | +20% bullet damage |
+| **Revenue** | +25% coins |
+| **Squad** | +1 soldier at the start of every run |
+
+Levels are built from their number, so a level plays the same on every retry.
+Each one is longer, with bigger crowds, tougher enemies and a bigger boss.
+
+## Web Lens requirements covered
+
+- `index.html` at the root of the zip, and every path is relative
+- Self-contained, with no network requests: everything is drawn on a canvas,
+  all sounds are synthesised with Web Audio, and the one font (Russo One,
+  SIL OFL) ships in `fonts/`
+- No camera, microphone or motion sensors
+- The Web Lens API (`@snap/web-lens-api` v0.1.2, `snap-api.js`) ships inside
+  the zip and loads before `game.js`. The game calls `snapchat.init()` once
+  behind the loading screen and checks every capability with
+  `isSupported()`, so it still works without them.
+- **Storage**: level, coins, upgrades and the sound setting are saved through
+  `snapchat.storage` (key `save`).
+- **Leaderboards**: ranks **career coins** (every coin ever collected),
+  submitted as an integer at the end of each run. The trophy button opens
+  Snapchat's panel and only appears when the capability is supported.
+- **Safe zone**: the HUD, upgrade cards and the squad stay inside
+  `CFG.SAFE_TOP` / `CFG.SAFE_BOTTOM` (12% of the screen height at the top and
+  16% at the bottom, or the device's safe-area insets if larger), set at the
+  top of `game.js`. Only sky, sea and bridge reach under Snapchat's controls.
+  Add `#safe` to the URL to see the zone.
+- Portrait layout that scales to tall phones and centres on wide screens.
+  Touch, mouse and keyboard all work. Audio starts on the first tap, and the
+  game pauses when the app goes to the background.
+
+## Upload to Snapchat
+
+| File | What it is |
+|---|---|
+| `release/bridge-war.zip` | The Lens. `index.html` is at the zip root. Upload this. |
+| `marketing/icon.png` | Lens icon, 1024×1024 (`icon-512.png` is 512×512) |
+
+1. In **My Lenses**, create a Web Lens and upload `release/bridge-war.zip`.
+2. Add `marketing/icon.png` as the Lens icon.
+3. Turn on the leaderboard for the Lens, or the trophy button stays hidden.
+
+## Build and test
+
+```sh
+./scripts/build-zip.sh        # rebuilds release/bridge-war.zip
+```
+
+Serve the folder with any static server (the font needs `http://`). Outside
+Snapchat the API uses its desktop stub, so saves only last until you reload.
+`#debug` exposes a `window.__bw` test hook.
