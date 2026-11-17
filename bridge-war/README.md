@@ -124,9 +124,12 @@ Bitmoji (and its bone names) can only be checked inside Snapchat.
 |---|---|
 | `release/bridge-war.zip` | The Lens. `index.html` is at the zip root. Upload this. |
 | `marketing/icon.png` | Lens icon, 1024×1024 (`icon-512.png` is 512×512) |
+| `marketing/preview.mp4` | Preview video: 8 s, 1080×1920, 30 fps, H.264 + AAC sound. The squad shoots through a horde and takes a ×2 gate, then the armed boss fight, "BOSS DOWN!" and the level-clear card. |
+| `release/bridge-war-upload-kit.zip` | Everything above in one zip: the Lens zip, both icons and the preview video. |
 
 1. In **My Lenses**, create a Web Lens and upload `release/bridge-war.zip`.
-2. Add `marketing/icon.png` as the Lens icon.
+2. Add `marketing/icon.png` as the Lens icon and `marketing/preview.mp4` as the
+   preview video.
 3. Turn on the leaderboard for the Lens, or the trophy button stays hidden.
 
 ## Build and test
@@ -137,4 +140,5 @@ Bitmoji (and its bone names) can only be checked inside Snapchat.
 
 Serve the folder with any static server (the font needs `http://`). Outside
 Snapchat the API uses its desktop stub, so saves only last until you reload.
-`#debug` exposes a `window.__bw` test hook.
+`#debug` exposes a `window.__bw` test hook. `scripts/capture-preview.js`
+re-records the preview video (see the comment at its top).
