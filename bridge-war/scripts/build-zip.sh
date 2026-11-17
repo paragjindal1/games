@@ -7,9 +7,8 @@ mkdir -p release
 rm -f release/bridge-war.zip
 zip -9 -q -r release/bridge-war.zip index.html style.css game.js snap-api.js three.bundle.js LICENSE-three.txt fonts
 ls -l release/bridge-war.zip
-# The upload kit: the Lens plus its icon and preview video, ready for My Lenses.
-rm -f release/bridge-war-upload-kit.zip
-mkdir -p release/.kit && cp release/bridge-war.zip marketing/icon.png marketing/icon-512.png marketing/preview.mp4 release/.kit/
-(cd release/.kit && zip -9 -q ../bridge-war-upload-kit.zip bridge-war.zip icon.png icon-512.png preview.mp4)
-rm -rf release/.kit
-ls -l release/bridge-war-upload-kit.zip
+# The store assets go in their own zip. It has no index.html, so it must never
+# be uploaded as the Lens: upload release/bridge-war.zip.
+rm -f release/bridge-war-upload-kit.zip release/bridge-war-icon-and-video.zip
+(cd marketing && zip -9 -q ../release/bridge-war-icon-and-video.zip icon.png icon-512.png preview.mp4)
+ls -l release/bridge-war-icon-and-video.zip
