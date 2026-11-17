@@ -7,10 +7,13 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+  <!-- 3D world underneath, 2D HUD on top -->
+  <canvas id="gl"></canvas>
   <canvas id="game"></canvas>
   <div id="insets"></div>
-  <!-- Snap Web Lens API: shipped inside the zip (the Lens CSP blocks scripts loaded from a URL). -->
+  <!-- Snap Web Lens API and three.js ship inside the zip (the Lens CSP blocks scripts loaded from a URL). -->
   <script src="./snap-api.js"></script>
+  <script src="./three.bundle.js"></script>
   <script src="./game.js"></script>
 </body>
 </html>

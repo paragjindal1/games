@@ -5,5 +5,5 @@ set -e
 cd "$(dirname "$0")/.."
 mkdir -p release
 rm -f release/bridge-war.zip
-zip -9 -q -r release/bridge-war.zip index.html style.css game.js snap-api.js fonts
+zip -9 -q -r release/bridge-war.zip index.html style.css game.js snap-api.js three.bundle.js LICENSE-three.txt fonts
 ls -l release/bridge-war.zip
