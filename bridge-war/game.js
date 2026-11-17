@@ -117,7 +117,7 @@
   let savePending = Promise.resolve();
 
   async function boot() {
-    init3D();
+    try { init3D(); } catch (e) { console.warn('3D init failed:', e && e.message); no3D = true; glCanvas.style.display = 'none'; }
     resize();
     const fontsReady = (document.fonts && document.fonts.load)
       ? document.fonts.load(`20px ${FD}`).catch(() => {})
@@ -711,6 +711,7 @@
 
   // ================================================================ 3D world
   let renderer, scene, camera;
+  let no3D = false, glLost = false;
   const dummy = new T.Object3D();
   const tmpC = new T.Color();
   const W = {};                // world meshes
@@ -776,8 +777,26 @@
     return t;
   }
 
+  // Picks WebGL2 if the device has it, else WebGL1 (three.js r162 still supports
+  // it), probing first so no renderer is created that would fail. Returns false
+  // when there is no WebGL at all.
+  function makeRenderer() {
+    const probe = (type) => { try { const c = document.createElement('canvas'); return !!c.getContext(type); } catch (e) { return false; } };
+    const opts = { canvas: glCanvas, antialias: true, powerPreference: 'high-performance' };
+    const tries = [];
+    if (probe('webgl2')) tries.push(() => new T.WebGLRenderer(opts));
+    if (probe('webgl') && T.WebGL1Renderer) tries.push(() => new T.WebGL1Renderer(opts), () => new T.WebGL1Renderer(Object.assign({}, opts, { antialias: false })));
+    for (const make of tries) {
+      try { renderer = make(); return true; } catch (e) { console.warn('Renderer failed:', e && e.message); }
+    }
+    return false;
+  }
+
   function init3D() {
-    renderer = new T.WebGLRenderer({ canvas: glCanvas, antialias: true, powerPreference: 'high-performance' });
+    if (!makeRenderer()) { no3D = true; glCanvas.style.display = 'none'; return; }
+    // if the GPU drops the context, skip drawing until it comes back
+    glCanvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); glLost = true; });
+    glCanvas.addEventListener('webglcontextrestored', () => { glLost = false; });
     scene = new T.Scene();
     scene.background = new T.Color(0x8fd0ff);
     scene.fog = new T.Fog(0x8fd0ff, 95, 215);
@@ -890,7 +909,7 @@
   }
 
   function resize3D(cw, ch, topPx, botPx) {
-    if (!renderer) return;
+    if (!renderer || no3D) return;
     renderer.setPixelRatio(dpr);
     renderer.setSize(cw, ch, false);
     const aspect = cw / ch;
@@ -1345,6 +1364,13 @@
     camera.updateProjectionMatrix();
   }
 
+  function safeRender() {
+    try { render3D(); } catch (e) {
+      console.warn('Render error:', e && e.message);
+      if (avatar) { avatarErr = 'render: ' + ((e && e.message) || e); for (const m of avatar.meshes) { scene.remove(m); } avatar = null; }
+    }
+  }
+
   // Projects a world point onto the HUD canvas; k is HUD px per world unit there.
   const pv = new T.Vector3();
   function project(X, Y, Z) {
@@ -1699,10 +1725,19 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, offX * scale * dpr, 0);
     buttons = [];
-    if (screen === 'loading' || !G) {
+    if (no3D) {
+      // no WebGL on this device: say so plainly instead of failing
+      const g = ctx.createLinearGradient(0, 0, 0, LH);
+      g.addColorStop(0, '#8fd0ff'); g.addColorStop(0.5, '#2e86de'); g.addColorStop(1, '#1859b8');
+      ctx.fillStyle = g; ctx.fillRect(-offX, 0, VW, LH);
+      label('BRIDGE WAR', LW / 2, ST + 120, 46);
+      ctx.fillStyle = 'rgba(23,34,46,0.85)'; rr(LW / 2 - 200, LH / 2 - 60, 400, 120, 18); ctx.fill();
+      text('This device can\u2019t show 3D graphics,', LW / 2, LH / 2 - 18, 17, '#fff');
+      text('so Bridge War can\u2019t run here.', LW / 2, LH / 2 + 14, 17, '#fff');
+    } else if (screen === 'loading' || !G) {
       label('LOADING…', LW / 2, LH / 2, 28);
     } else {
-      render3D();
+      if (!glLost) safeRender();
       drawWorldLabels();
       if (G.hurt > 0) { ctx.fillStyle = `rgba(255,40,40,${G.hurt * 0.6})`; ctx.fillRect(-offX, 0, VW, LH); }
       if (screen === 'menu') drawMenu();
@@ -1728,10 +1763,11 @@
   function frame(t) {
     const dt = Math.min(0.05, (t - last) / 1000);
     last = t;
-    update(dt);
-    draw();
+    try { update(dt); draw(); } catch (e) { console.warn('Frame error:', e && e.message); }
     requestAnimationFrame(frame);
   }
+  // nothing async may surface as an unhandled error
+  window.addEventListener('unhandledrejection', (e) => { console.warn('Unhandled:', e.reason && e.reason.message); e.preventDefault(); });
   window.addEventListener('resize', resize);
   if (DEBUG) {
     window.__bw = {

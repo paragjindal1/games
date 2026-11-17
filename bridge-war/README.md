@@ -128,8 +128,15 @@ If the model faces the wrong way on some devices, set `CFG.AVATAR_YAW`.
 ## Web Lens requirements covered
 
 - `index.html` at the root of the zip, and every path is relative
-- Self-contained: the world is rendered with **three.js r170** (MIT, bundled
-  as `three.bundle.js` with its licence), the HUD is drawn on a 2D canvas on
+- **Runs on WebGL2 and WebGL1**: the world is rendered with **three.js r162**
+  (MIT, bundled as `three.bundle.js` with its licence), the last release that
+  still supports WebGL1. The game probes the device first and uses WebGL2 if
+  it can, else WebGL1. With no WebGL at all it shows a short message instead
+  of failing. A frame that hits an error is skipped rather than stopping the
+  Lens, and if drawing the Bitmoji ever fails the squad falls back to the
+  built-in soldier. (Snapchat's automated test rejected an earlier build that
+  needed WebGL2.)
+- Self-contained: the HUD is drawn on a 2D canvas on
   top, all sounds are synthesised with Web Audio, and the one font (Russo One,
   SIL OFL) ships in `fonts/`. The only thing fetched at runtime is the
   player's Bitmoji, from the URL Snapchat's API hands back.
