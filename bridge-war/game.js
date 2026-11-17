@@ -1,8 +1,9 @@
 /* Bridge War: a 3D squad runner-shooter built as a Snapchat Web Lens.
  * Your squad charges down a bridge and fires on its own. Drag left and right
- * to pick a lane: bullets raise the gate in front of you, and once the red
- * horde pours through, the squad auto-aims at it. Dodge the rolling tires,
- * beat the boss at the end of the bridge, and spend coins on upgrades.
+ * to pick a lane: bullets raise the gate in front of you (multiplier, divider
+ * and mystery gates are bulletproof), the squad auto-aims at the charging
+ * horde, tires flatten whoever they roll over, and an armed boss waits at
+ * the end of the bridge. Spend coins on gun upgrades.
  * Inside Snapchat the soldiers are the player's own 3D Bitmoji.
  * The world is rendered with three.js; the HUD is a 2D canvas on top. */
 (() => {
@@ -35,6 +36,10 @@
   const BOSS_HP = 9000;         // level 1; grows steeply each level
   const BOSS_STOP = 30;         // the squad halts this far from the boss
   const WAKE = 40;              // a horde charges once the squad is this close
+  const TIRE_HALF = 0.7;        // a tire flattens every soldier within this many world units of its centre line
+  const BOSS_SCALE = 5.6;
+  const BOSS_MUZZLE = { x: 0.24, y: 0.67, z: 1.27 };      // in the boss model's own units
+  const SOLDIER_MUZZLE = { x: 0.2, y: 0.71, z: 0.56 };    // built-in soldier, 1 unit tall
 
   const UP = {
     rate: { name: 'FIRE RATE', col: '#62c23a', dark: '#3c8a1e', base: 120 },
@@ -247,6 +252,7 @@
     tire() { noise(0.4, 0.45, 300, 70, 0.7, 'lowpass'); tone(70, 0.3, 'sine', 0.4, 0.5); },
     boom() { noise(0.6, 0.5, 700, 60, 0.6, 'lowpass'); tone(55, 0.5, 'sine', 0.45, 0.4); },
     elite() { tone(110, 0.3, 'sawtooth', 0.1, 0.6); },
+    bossShot() { noise(0.16, 0.4, 900, 200, 0.7, 'lowpass'); tone(110, 0.14, 'square', 0.08, 0.5); },
     alarm() { tone(90, 0.5, 'sawtooth', 0.14, 0.7); tone(60, 0.7, 'sine', 0.3, 0.8, 0.1); },
     win() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.2, 'triangle', 0.14, 1, i * 0.09)); },
     lose() { [392, 330, 262, 196].forEach((f, i) => tone(f, 0.28, 'triangle', 0.14, 1, i * 0.15)); },
@@ -275,13 +281,26 @@
           : k === good
           ? -Math.round(3 + rnd() * 6 + i * 1.6 + L * 0.8)
           : -Math.round(10 + rnd() * 12 + i * 3 + L * 2);
-        segs.push({ x1: -1 + (2 / n) * k, x2: -1 + (2 / n) * (k + 1), v, pulse: 0, acc: 0 });
+        segs.push({ x1: -1 + (2 / n) * k, x2: -1 + (2 / n) * (k + 1), op: 'add', v, pulse: 0, acc: 0, ping: 0 });
       }
       if (n > 1 && rnd() < 0.25) segs[good].v = Math.round(1 + rnd() * 3);
+      // multipliers, dividers and mystery gates are bulletproof: shooting can't change them
+      if (i >= 1 && n >= 2) {
+        const others = segs.map((_, k) => k).filter((k) => k !== good);
+        const take = () => segs[others.splice(Math.floor(rnd() * others.length), 1)[0]];
+        if (others.length && i >= 2 && rnd() < 0.3) { const g = take(); g.op = 'mul'; g.v = i >= 5 && rnd() < 0.25 ? 3 : 2; }
+        if (others.length && i >= 2 && rnd() < 0.4) { const g = take(); g.op = 'div'; g.v = rnd() < 0.6 ? 2 : 3; }
+        if (others.length && L >= 2 && rnd() < 0.35) {
+          const g = take(), r = rnd();
+          g.op = '?';
+          g.hide = r < 0.3 ? { op: 'mul', v: 2 } : r < 0.55 ? { op: 'add', v: Math.round(6 + i * 2) }
+            : r < 0.8 ? { op: 'div', v: 2 } : { op: 'add', v: -Math.round(8 + i * 2) };
+        }
+      }
       // shooting a gate raises it, more slowly the higher it gets, up to its cap
       ents.push({ kind: 'gate', z, segs, used: false, cap: Math.round(7 + i * 1.8 + L) });
       // the horde grows faster than the squad can, so the back half is a real fight
-      const count = i === 0 ? 1 + Math.floor(L / 2) : Math.min(120, Math.round(2 + L * 2 + 2.6 * Math.pow(i, 1.5)));
+      const count = i === 0 ? 1 + Math.floor(L / 2) : Math.min(130, Math.round(2 + L * 2.5 + 3.1 * Math.pow(i, 1.5)));
       const depth = Math.min(22, 6 + count * 0.2);
       for (let k = 0; k < count; k++) {
         ents.push({
@@ -326,7 +345,7 @@
     const lv = buildLevel(S.level);
     return {
       t: 0, dist: 0, ents: lv.ents, length: lv.length, bossZ: lv.bossZ, foeHp: lv.foeHp, boss: lv.ents[lv.ents.length - 1],
-      n: startSquad(), x: 0, tx: 0, face: Math.PI,
+      n: startSquad(), x: 0, tx: 0, face: Math.PI, aim: 0, form: [], flashes: [], ebul: [],
       bullets: [], parts: [], floats: [], coins: [], shotAcc: 0, earned: 0, kills: 0, peak: startSquad(),
       active: [], targets: [], lossBy: {}, gateZ: 1e9, wall: false, wallDone: 0, spawnT: 0, over: 0, running: false, panel: 0,
       pop: 0, hurt: 0, bump: 0,
@@ -384,32 +403,52 @@
     G.tx = clamp(G.tx, -lim, lim);
     G.x = lerp(G.x, G.tx, Math.min(1, dt * 16));
     G.peak = Math.max(G.peak, G.n);
+    // every drawn soldier keeps its own spot; gaps close up after losses
+    const want = Math.min(G.n, MAX_DRAWN);
+    while (G.form.length < want) G.form.push({ x: rand(-0.15, 0.15), z: rand(-0.15, 0.15), rec: 0 });
+    if (G.form.length > want) G.form.length = want;
+    const k = Math.min(1, dt * 4);
+    for (let i = 0; i < G.form.length; i++) {
+      const f = G.form[i], sp = SPOTS[i];
+      f.x = lerp(f.x, sp.x, k); f.z = lerp(f.z, sp.z, k); f.rec = Math.max(0, f.rec - dt);
+    }
+    // the squad turns to face what it's shooting at
+    const t = G.targets[0];
+    const aim = t && G.running ? clamp(Math.atan2((t.x - G.x) * XS, Math.max(2, t.z - G.dist)), -0.7, 0.7) : 0;
+    G.aim = lerp(G.aim, aim, Math.min(1, dt * 8));
   }
 
-  // Bullets fly straight up the squad's lane (raising the gate there) until
-  // something charges; then the squad auto-aims at whatever is coming.
+  // Every bullet leaves a real barrel: straight up the lane (raising the gate
+  // there) until something charges, then aimed at whatever is coming. Each shot
+  // kicks the soldier back, flashes at the muzzle and flicks out a casing.
   // Gates block every bullet, so a horde behind a gate is safe until it comes through.
   function fire(dt) {
     const tg = G.targets;
-    const ahead = G.gateZ < RANGE || tg.length > 0;
-    if (!ahead) return;
+    if (!(G.gateZ < RANGE || tg.length > 0) || !G.form.length) return;
     const shots = G.n * fireRate();
     const shown = Math.min(shots, MAX_SHOTS);
     const dmg = bulletDmg() * (shots / shown);
     G.shotAcc += shown * dt;
+    const yaw = G.aim, cy = Math.cos(yaw), sy = Math.sin(yaw);
     while (G.shotAcc >= 1) {
       G.shotAcc -= 1;
-      const sp = SPOTS[Math.floor(Math.random() * Math.min(G.n, MAX_DRAWN))];
-      const x = clamp(G.x + sp.x / XS, -0.98, 0.98), z = 0.6 + sp.z;
-      let vx = 0, vz = BULLET_SPEED;
+      const i = Math.floor(Math.random() * G.form.length), f = G.form[i];
+      const m = avatar && i < avatar.max ? avatar.muzzle : SOLDIER_MUZZLE;
+      const mx = G.x * XS + f.x + m.x * cy + m.z * sy, my = m.y, mz = f.z - m.x * sy + m.z * cy;
+      let dx = sy, dz = cy;
       if (tg.length) {
         const t = tg[Math.floor(Math.random() * Math.min(tg.length, 7))];
-        const dx = (t.x - x) * XS, dz = Math.max(1, t.z - G.dist - z), d = Math.hypot(dx, dz);
-        vx = dx / d * BULLET_SPEED / XS; vz = dz / d * BULLET_SPEED;
+        const tx = t.x * XS - mx, tz = Math.max(1, t.z - G.dist - mz), d = Math.hypot(tx, tz);
+        dx = tx / d; dz = tz / d;
       }
-      G.bullets.push({ x, z, vx, vz, dmg, life: RANGE / BULLET_SPEED });
+      dx += rand(-0.012, 0.012);
+      G.bullets.push({ x: clamp(mx / XS, -0.99, 0.99), y: my, z: mz, vx: dx * BULLET_SPEED / XS, vz: dz * BULLET_SPEED, dmg, life: RANGE / BULLET_SPEED });
+      f.rec = 0.1;
+      G.flashes.push({ x: mx, y: my, z: mz, yaw: Math.atan2(dx, dz), t: 0.05, big: 1 });
+      G.parts.push({ x: mx - cy * 0.1, y: my + 0.05, z: mz - 0.4, vx: -cy * rand(1.5, 2.6), vy: rand(2, 3.2), vz: rand(-1, 0), life: 0.45, max: 0.45, r: 0.04, col: 0xd9a520 });
       SFX.shot();
     }
+    if (G.flashes.length > 64) G.flashes.splice(0, G.flashes.length - 64);
   }
 
   function killFoe(e, z) {
@@ -450,7 +489,8 @@
           const seg = e.segs.find((s) => b.x >= s.x1 && b.x < s.x2);
           if (seg) {
             hit = true;
-            if (seg.v < e.cap) {
+            if (seg.op !== 'add') seg.ping = 0.12;   // bulletproof: the bullet just sparks off
+            else if (seg.v < e.cap) {
               seg.acc += 1;
               const need = seg.v < 0 ? 1 : 1.2 + seg.v * 0.6;
               if (seg.acc >= need) { seg.acc -= need; seg.v += 1; seg.pulse = 0.18; SFX.gateUp(); }
@@ -465,9 +505,27 @@
           if (e.kind === 'foe' && e.dead && b.dmg > before + 0.5) { b.dmg -= before; continue; }
           hit = true;
         }
-        if (hit) { if (Math.random() < 0.5) G.parts.push({ x: b.x * XS, y: 0.8, z, vx: rand(-1, 1), vy: rand(0, 2), vz: -2, life: 0.15, max: 0.15, r: 0.1, col: 0xfff3a8 }); break; }
+        if (hit) { if (Math.random() < 0.5) G.parts.push({ x: b.x * XS, y: b.y, z, vx: rand(-1, 1), vy: rand(0, 2), vz: -2, life: 0.15, max: 0.15, r: 0.1, col: 0xfff3a8 }); break; }
       }
       if (hit || b.life <= 0 || Math.abs(b.x) > 1.1) G.bullets.splice(i, 1);
+    }
+  }
+
+  function applyGate(g) {
+    if (g.op === 'add') {
+      if (g.v >= 0) {
+        const add = Math.min(g.v, MAX_SQUAD - G.n);
+        G.n += add; G.bump = 0.3;
+        if (g.v > 0) { floatText(G.x, 0.6, '+' + g.v, '#7fe0ff', 36); puff(G.x, 0, 0x9fe6ff, 14); SFX.plus(); }
+      } else { SFX.minus(); loseSoldiers(-g.v, true, 'gate'); }
+    } else if (g.op === 'mul') {
+      const add = Math.min(G.n * (g.v - 1), MAX_SQUAD - G.n);
+      G.n += add; G.bump = 0.4;
+      floatText(G.x, 0.6, '\u00d7' + g.v + '  +' + add, '#7dffb0', 38); puff(G.x, 0, 0x7dffb0, 18); SFX.plus();
+    } else {
+      SFX.minus();
+      floatText(G.x, 1.2, '\u00f7' + g.v, '#c69bff', 42);
+      loseSoldiers(G.n - Math.ceil(G.n / g.v), true, 'gate');
     }
   }
 
@@ -483,17 +541,14 @@
       act.push(e);
       if (e.flash > 0) e.flash -= dt;
       if (e.kind === 'gate') {
-        for (const s of e.segs) s.pulse = Math.max(0, s.pulse - dt);
+        for (const s of e.segs) { s.pulse = Math.max(0, s.pulse - dt); s.ping = Math.max(0, s.ping - dt); }
         if (!e.used && z > 0.15) gateZ = Math.min(gateZ, z);
         if (!e.used && z <= 0.15 && G.n > 0) {
           e.used = true;
           const seg = e.segs.find((s) => G.x >= s.x1 && G.x < s.x2) || e.segs[e.segs.length - 1];
           seg.taken = true;
-          if (seg.v >= 0) {
-            const add = Math.min(seg.v, MAX_SQUAD - G.n);
-            G.n += add; G.bump = 0.3;
-            if (seg.v > 0) { floatText(G.x, 0.6, '+' + seg.v, '#7fe0ff', 36); puff(G.x, 0, 0x9fe6ff, 14); SFX.plus(); }
-          } else { SFX.minus(); loseSoldiers(-seg.v, true, 'gate'); }
+          if (seg.op === '?') { seg.revealed = true; floatText(G.x, 1.4, '?', '#ffc83d', 44, 2.6); }
+          applyGate(seg.op === '?' ? seg.hide : seg);
         }
       } else if (e.kind === 'foe') {
         // the horde holds behind its gate, then charges
@@ -512,9 +567,20 @@
         if (!e.awake && z < 75) e.awake = true;
         if (e.awake) { e.z -= 12 * dt; e.rot += dt * 9; }
         z = e.z - G.dist;
-        if (z <= 0.6 && z > -1.2 && Math.abs(e.x - G.x) < r + 0.24 && G.n > 0) {
-          e.dead = true; shake = 0.45; SFX.tire(); puff(e.x, z, 0x3a3a3a, 16, 2);
-          loseSoldiers(Math.max(2, Math.ceil(G.n * 0.25)), true, 'tire');
+        // the tire rolls right through the squad and flattens every soldier in its path
+        if (!e.hitSquad && z <= 0.7 && z > -1 && G.n > 0) {
+          e.hitSquad = true;
+          const tx = e.x * XS, under = [];
+          G.form.forEach((f, i) => { if (Math.abs(G.x * XS + f.x - tx) < TIRE_HALF) under.push(i); });
+          if (under.length) {
+            const k = Math.max(under.length, Math.round(under.length * G.n / Math.max(1, G.form.length)));
+            for (let j = under.length - 1; j >= 0; j--) {
+              const f = G.form[under[j]];
+              for (let q = 0; q < 5; q++) G.parts.push({ x: G.x * XS + f.x + rand(-0.15, 0.15), y: 0.15, z: f.z + rand(-0.15, 0.15), vx: rand(-2.5, 2.5), vy: rand(1, 3), vz: rand(-2, 1), life: rand(0.35, 0.6), max: 0.6, r: rand(0.07, 0.12), col: q % 2 ? 0x2196f3 : 0xa9b8c2 });
+              G.form.splice(under[j], 1);
+            }
+            shake = 0.45; SFX.tire(); loseSoldiers(k, true, 'tire');
+          }
         }
       }
       // what the squad may auto-aim at (sorted by distance below)
@@ -549,9 +615,24 @@
       G.spawnT = Math.max(0.18, 0.55 - S.level * 0.03);
       G.ents.push({ kind: 'foe', z: B.z + rand(-1, 3), x: clamp(B.x + rand(-0.7, 0.7), -0.92, 0.92), hp: G.foeHp, max: G.foeHp, ph: rand(0, 6), flash: 0, awake: true, sp: 5.5 + S.level * 0.2 });
     }
+    // his gun: three-round bursts aimed at the squad; move to dodge them
+    B.fireT = (B.fireT === undefined ? 1.2 : B.fireT) - dt;
+    if (B.fireT <= 0) { B.fireT = Math.max(1.1, 2.2 - S.level * 0.07); B.burst = 3; B.burstT = 0; }
+    if (B.burst > 0) {
+      B.burstT -= dt;
+      if (B.burstT <= 0) {
+        B.burst--; B.burstT = 0.13; B.recoil = 0.14;
+        const m = BOSS_MUZZLE, mx = B.x * XS - m.x * BOSS_SCALE, my = m.y * BOSS_SCALE, mz = bz - m.z * BOSS_SCALE;
+        const dx = G.x * XS + rand(-0.35, 0.35) - mx, dy = 0.6 - my, dz = 0.2 - mz, d = Math.hypot(dx, dy, dz);
+        G.ebul.push({ x: mx, y: my, z: mz, vx: dx / d * 30, vy: dy / d * 30, vz: dz / d * 30 });
+        G.flashes.push({ x: mx, y: my, z: mz, yaw: Math.atan2(dx, dz), t: 0.08, big: 3.5 });
+        SFX.bossShot();
+      }
+    }
+    B.recoil = Math.max(0, (B.recoil || 0) - dt);
     B.throwT -= dt;
     if (B.throwT <= 0 && bz > 6) {
-      B.throwT = Math.max(2.2, 4.2 - S.level * 0.2);
+      B.throwT = Math.max(3.5, 6 - S.level * 0.2);
       const hp = G.foeHp * 9;
       G.ents.push({ kind: 'tire', z: B.z - 1.5, x: clamp(G.x + rand(-0.1, 0.1), -0.62, 0.62), hp, max: hp, rot: 0, flash: 0, awake: true });
       B.stomp = 0.4; SFX.tire();
@@ -559,7 +640,20 @@
     B.stomp = Math.max(0, B.stomp - dt);
   }
 
+  // The boss's rounds land where the squad was when he fired.
+  function updateEnemyBullets(dt) {
+    for (let i = G.ebul.length - 1; i >= 0; i--) {
+      const b = G.ebul[i];
+      b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+      if (b.z > 0.9) continue;
+      G.ebul.splice(i, 1);
+      for (let q = 0; q < 6; q++) G.parts.push({ x: b.x, y: Math.max(0.2, b.y), z: b.z, vx: rand(-2, 2), vy: rand(1, 3), vz: rand(-2, 2), life: 0.3, max: 0.3, r: 0.08, col: 0xff6a3a });
+      if (Math.abs(b.x - G.x * XS) < squadR(G.n) * XS + 0.15 && G.n > 0) loseSoldiers(1 + Math.floor((S.level - 1) / 4), false, 'bossgun');
+    }
+  }
+
   function updateFx(dt) {
+    for (let i = G.flashes.length - 1; i >= 0; i--) { G.flashes[i].t -= dt; if (G.flashes[i].t <= 0) G.flashes.splice(i, 1); }
     for (let i = G.parts.length - 1; i >= 0; i--) {
       const p = G.parts[i];
       p.life -= dt; if (p.life <= 0) { G.parts.splice(i, 1); continue; }
@@ -589,6 +683,7 @@
     updateEnts(G.running ? dt : dt * 0.4);
     updateBoss(dt);
     updateBullets(dt);
+    updateEnemyBullets(dt);
     updateFx(dt);
     if (G.wallDone) {
       G.wallDone += dt;
@@ -651,6 +746,18 @@
       body: T.mergeGeometries(bits.map((g) => g.toNonIndexed())),
       leg: part(new T.CapsuleGeometry(0.078, 0.25, 3, 8), o.leg, 0, -0.2, 0),
     };
+  }
+
+  // A rifle 1 unit long pointing along +z, gripped at the origin.
+  function gunGeo() {
+    const bits = [
+      part(new T.BoxGeometry(0.075, 0.1, 0.42), 0x2b2f35, 0, 0.02, 0.12),
+      part(new T.CylinderGeometry(0.02, 0.02, 0.3, 8), 0x1b1e22, 0, 0.04, 0.47, Math.PI / 2),
+      part(new T.BoxGeometry(0.05, 0.13, 0.06), 0x2b2f35, 0, -0.08, 0.12),
+      part(new T.BoxGeometry(0.06, 0.09, 0.16), 0x6b4a2a, 0, -0.01, -0.15),
+      part(new T.BoxGeometry(0.03, 0.04, 0.08), 0x1b1e22, 0, 0.09, 0.08),
+    ];
+    return T.mergeGeometries(bits.map((g) => g.toNonIndexed()));
   }
 
   function stripeTexture(w, h, draw) {
@@ -725,7 +832,11 @@
     const blob = new T.CircleGeometry(0.3, 14); blob.rotateX(-Math.PI / 2);
     W.shadow = inst(blob, new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }), MAX_FOES + MAX_DRAWN + 12);
     // bullets, coins, particles
-    W.bullets = inst(new T.BoxGeometry(0.09, 0.09, 1.3), new T.MeshBasicMaterial({ color: 0xfff2a0 }), 160);
+    W.bullets = inst(new T.BoxGeometry(0.07, 0.07, 1.1), new T.MeshBasicMaterial({ color: 0xfff2a0 }), 160);
+    W.ebullets = inst(new T.BoxGeometry(0.2, 0.2, 1.8), new T.MeshBasicMaterial({ color: 0xff5a2a }), 24);
+    // muzzle flashes: a bright star stretched along the barrel
+    W.flash = inst(new T.OctahedronGeometry(1, 0), new T.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending }), 72);
+    W.gunGeo = gunGeo();
     const coin = new T.CylinderGeometry(0.26, 0.26, 0.07, 14); coin.rotateX(Math.PI / 2);
     W.coins = inst(coin, lam(0xffd23a, { emissive: 0x7a5a00 }), 80);
     W.parts = inst(new T.IcosahedronGeometry(1, 0), new T.MeshBasicMaterial({ color: 0xffffff }), 320, true);
@@ -763,7 +874,10 @@
     for (const sd of [-1, 1]) {
       const eye = new T.Mesh(new T.SphereGeometry(0.028, 8, 6), new T.MeshBasicMaterial({ color: 0xffd23a })); eye.position.set(sd * 0.065, 1.0, 0.155); boss.add(eye);
     }
-    boss.userData = { legs, mat: bossMat };
+    // his gun, held at the hip on his right side
+    const bgun = new T.Mesh(W.gunGeo, lam(0xffffff, { vertexColors: true }));
+    bgun.scale.setScalar(1.7); bgun.position.set(0.24, 0.6, 0.22); boss.add(bgun);
+    boss.userData = { legs, mat: bossMat, gun: bgun };
     boss.visible = false; scene.add(boss); W.boss = boss;
   }
 
@@ -783,8 +897,9 @@
   }
 
   // Loads the Bitmoji GLB and makes one animated copy per Bitmoji soldier.
-  // If the model ships animations, its run (and idle) clips play; if not,
-  // its own leg and arm bones are swung by hand.
+  // Each copy holds a rifle: its arms are posed onto the gun every frame, its
+  // legs run (the model's own run clip if it has one, otherwise its leg bones
+  // are swung by hand), and each shot kicks it back.
   function loadAvatar(url) {
     return new Promise((resolve, reject) => {
       const loader = new T.GLTFLoader();
@@ -810,51 +925,107 @@
           const idleClip = find(/idle|stand|breath/i) || null;
           const max = clamp(Math.floor(CFG.AVATAR_TRIS / tris), 1, CFG.AVATAR_MAX);
           if (avatar) for (const a of avatar.clones) scene.remove(a.holder);
+          const gunMat = new T.MeshLambertMaterial({ vertexColors: true });
           const clones = [];
+          let gunAt = null;
           for (let i = 0; i < max; i++) {
             const model = T.cloneSkinned(root);
             const fit = new T.Group(), holder = new T.Group();
             fit.scale.setScalar(k); fit.position.set(-c.x * k, -box.min.y * k, -c.z * k);
-            fit.add(model); holder.add(fit); holder.visible = false; scene.add(holder);
-            const a = { holder, mixer: null, run: null, idle: null, bones: null, ph: Math.random() * 6 };
+            fit.add(model); holder.add(fit); scene.add(holder);
+            const a = { holder, mixer: null, run: null, idle: null, rig: rigOf(model) };
             if (runClip) {
               a.mixer = new T.AnimationMixer(model);
               a.run = a.mixer.clipAction(runClip); a.run.play();
               a.run.time = Math.random() * runClip.duration;
               if (idleClip) { a.idle = a.mixer.clipAction(idleClip); a.idle.play(); a.idle.time = Math.random() * idleClip.duration; }
-            } else a.bones = limbBones(model);
+            }
+            // place the rifle in front of the chest, within reach of the hands
+            if (!gunAt) gunAt = gunSpot(holder, a.rig);
+            a.gun = new T.Mesh(W.gunGeo, gunMat);
+            a.gun.scale.setScalar(gunAt.size); a.gun.position.copy(gunAt.pos);
+            holder.add(a.gun); a.gunZ = gunAt.pos.z;
+            holder.visible = false;
             clones.push(a);
           }
-          avatar = { max, tris, clones, animated: !!runClip, rigged: !!(clones[0].bones && clones[0].bones.length) };
+          const r0 = clones[0].rig;
+          avatar = {
+            max, tris, clones, animated: !!runClip, rigged: r0.legs.length > 0, arms: r0.arms.length,
+            muzzle: { x: gunAt.pos.x, y: gunAt.pos.y + 0.04 * gunAt.size, z: gunAt.pos.z + 0.62 * gunAt.size },
+          };
           resolve(avatar);
         } catch (e) { reject(e); }
       }, undefined, reject);
     });
   }
 
-  // Finds the upper leg and upper arm bones on each side by name, for rigs without clips.
-  function limbBones(model) {
+  // Finds the legs and arms by bone name: upper leg + lower leg, upper arm + forearm + hand.
+  function rigOf(model) {
     const all = [];
     model.traverse((o) => { if (o.isBone) all.push(o); });
     const side = (n) => (/left/i.test(n) || /(^|[_.\s-])l([_.\s-]|$)/i.test(n) || /^l[A-Z]/.test(n) ? -1
       : /right/i.test(n) || /(^|[_.\s-])r([_.\s-]|$)/i.test(n) || /^r[A-Z]/.test(n) ? 1 : 0);
-    const pick = (good, fallback, bad) => {
-      const out = [];
-      for (const s of [-1, 1]) {
-        const ok = (b) => side(b.name) === s && !bad.test(b.name);
-        const b = all.find((x) => ok(x) && good.test(x.name)) || all.find((x) => ok(x) && fallback.test(x.name));
-        if (b) out.push(b);
-      }
-      return out;
+    const child = (b) => (b && b.children.find((c) => c.isBone)) || null;
+    const find = (sd, good, fallback, bad) => {
+      const ok = (b) => side(b.name) === sd && !bad.test(b.name);
+      return all.find((x) => ok(x) && good.test(x.name)) || all.find((x) => ok(x) && fallback.test(x.name)) || null;
     };
-    const legs = pick(/up(per)?_?leg|thigh/i, /leg/i, /low|fore|calf|shin|foot|toe/i);
-    const arms = pick(/up(per)?_?arm/i, /arm|shoulder/i, /low|fore|hand|finger/i);
-    return legs.map((bone, i) => ({ bone, rest: bone.quaternion.clone(), kind: 'leg', s: i ? 1 : -1 }))
-      .concat(arms.map((bone, i) => ({ bone, rest: bone.quaternion.clone(), kind: 'arm', s: i ? 1 : -1 })));
+    const legs = [], arms = [];
+    for (const sd of [-1, 1]) {
+      const up = find(sd, /up(per)?_?leg|thigh/i, /leg/i, /low|fore|calf|shin|knee|foot|toe/i);
+      const low = child(up);
+      if (up) legs.push({ sd, up, low, upRest: up.quaternion.clone(), lowRest: low ? low.quaternion.clone() : null });
+      let arm = find(sd, /up(per)?_?arm/i, /arm/i, /low|fore|hand|finger|shoulder|clavicle/i);
+      if (!arm) arm = child(find(sd, /shoulder|clavicle/i, /shoulder|clavicle/i, /^$/));
+      const fore = child(arm), hand = child(fore);
+      if (arm && fore) arms.push({ sd, up: arm, fore, hand, upRest: arm.quaternion.clone(), foreRest: fore.quaternion.clone() });
+    }
+    return { legs, arms };
   }
 
-  const swingQ = new T.Quaternion(), XAXIS = new T.Vector3(1, 0, 0);
-  function animateAvatar(a, run, ph, dt) {
+  // Where the rifle goes, in holder space, from the rest pose of the arms.
+  function gunSpot(holder, rig) {
+    holder.updateMatrixWorld(true);
+    const v = new T.Vector3();
+    if (rig.arms.length) {
+      let sx = 0, sy = 0, reach = 0;
+      for (const a of rig.arms) {
+        a.up.getWorldPosition(v); holder.worldToLocal(v); sx += v.x; sy += v.y;
+        const e = a.fore.getWorldPosition(new T.Vector3()), h = (a.hand || a.fore).getWorldPosition(new T.Vector3());
+        reach += a.up.getWorldPosition(new T.Vector3()).distanceTo(e) + e.distanceTo(h);
+      }
+      sx /= rig.arms.length; sy /= rig.arms.length; reach /= rig.arms.length;
+      reach = Math.max(reach, 0.18);
+      return { pos: new T.Vector3(sx - 0.05, sy - reach * 0.32, reach * 0.62), size: clamp(reach * 1.75, 0.35, 0.85) };
+    }
+    return { pos: new T.Vector3(-0.1, 0.55, 0.26), size: 0.5 };
+  }
+
+  const vA = new T.Vector3(), vB = new T.Vector3(), vT = new T.Vector3(), vE = new T.Vector3();
+  const qA = new T.Quaternion(), qB = new T.Quaternion(), qP = new T.Quaternion();
+  const AXIS = new T.Vector3();
+  // Turns bone so that the direction to its child points at target (world space).
+  function pointBone(bone, child, target) {
+    bone.getWorldPosition(vA); child.getWorldPosition(vB);
+    vB.sub(vA); if (vB.lengthSq() < 1e-10) return;
+    vT.copy(target).sub(vA); if (vT.lengthSq() < 1e-10) return;
+    qA.setFromUnitVectors(vB.normalize(), vT.normalize());
+    bone.getWorldQuaternion(qB); qB.premultiply(qA);
+    bone.parent.getWorldQuaternion(qP);
+    bone.quaternion.copy(qP.invert().multiply(qB));
+    bone.updateMatrixWorld(true);
+  }
+  // Swings bone from its rest pose about a world axis.
+  function swingBone(bone, rest, axis, ang) {
+    bone.parent.getWorldQuaternion(qP);
+    qB.copy(qP).multiply(rest);
+    qB.premultiply(qA.setFromAxisAngle(axis, ang));
+    bone.quaternion.copy(qP.invert().multiply(qB));
+    bone.updateMatrixWorld(true);
+  }
+
+  function animateAvatar(a, run, ph, dt, rec) {
+    const rig = a.rig;
     if (a.mixer) {
       // crossfade between run and idle
       const w = run ? 1 : 0;
@@ -862,11 +1033,35 @@
       if (a.idle) { a.run.setEffectiveWeight(a.runW); a.idle.setEffectiveWeight(1 - a.runW); a.run.timeScale = 1.25; }
       else a.run.timeScale = run ? 1.25 : 0.15;
       a.mixer.update(dt);
-    } else if (a.bones) {
-      for (const b of a.bones) {
-        const ang = run ? Math.sin(ph) * (b.kind === 'leg' ? 0.75 : -0.55) * b.s : Math.sin(uiT * 2 + b.s) * 0.04;
-        b.bone.quaternion.copy(b.rest).multiply(swingQ.setFromAxisAngle(XAXIS, ang));
+    }
+    a.holder.updateMatrixWorld(true);
+    // legs: swung about the body's sideways axis, knees bending on the forward swing
+    if (!a.mixer && rig.legs.length) {
+      AXIS.set(1, 0, 0).applyQuaternion(a.holder.quaternion);
+      for (const L of rig.legs) {
+        const p = ph + (L.sd < 0 ? 0 : Math.PI);
+        swingBone(L.up, L.upRest, AXIS, run ? -0.75 * Math.sin(p) : 0);
+        if (L.low) swingBone(L.low, L.lowRest, AXIS, run ? 0.2 + 0.95 * Math.max(0, Math.cos(p)) : 0.05);
       }
+    }
+    // arms: both hands on the rifle, which kicks back when it fires
+    a.gun.position.z = a.gunZ - rec * 0.5;
+    a.gun.rotation.x = -rec * 0.8;
+    a.holder.updateMatrixWorld(true);
+    const gs = a.gun.scale.x;
+    for (const A of rig.arms) {
+      A.up.quaternion.copy(A.upRest); A.fore.quaternion.copy(A.foreRest); A.up.updateMatrixWorld(true);
+      // right hand on the grip, left hand on the fore-end
+      vT.set(0, -0.06, A.sd > 0 ? -0.02 : 0.24).multiplyScalar(gs).add(a.gun.position);
+      a.holder.localToWorld(vT);
+      A.up.getWorldPosition(vE);
+      // elbow: halfway there, dropped a little and pushed out to the side
+      const target = vT.clone();
+      vE.lerp(target, 0.5);
+      vA.set(A.sd > 0 ? -1 : 1, -1, 0).normalize().multiplyScalar(0.07 * gs * 2).applyQuaternion(a.holder.quaternion);
+      vE.add(vA);
+      pointBone(A.up, A.fore, vE);
+      pointBone(A.fore, A.hand || A.fore, target);
     }
   }
 
@@ -916,25 +1111,27 @@
 
     nShadow = 0; labels.length = 0;
     // the squad
-    const drawn = Math.min(G.n, MAX_DRAWN);
+    const drawn = Math.min(G.form.length, MAX_DRAWN);
     const bm = avatar ? Math.min(drawn, avatar.max) : 0;
     const run = G.running && !(G.wall && !G.wallDone);
     const grow = 1 + G.bump * 0.6;
+    const yaw = G.face + G.aim;
     let nb = 0;
     for (let i = 0; i < drawn; i++) {
-      const sp = SPOTS[i], X = G.x * XS + sp.x, Z = sp.z, ph = G.t * 13 + i * 1.7;
+      const f = G.form[i], rec = f.rec || 0, ph = G.t * 13 + i * 1.7;
+      // recoil nudges each soldier back along its line of fire
+      const X = G.x * XS + f.x - Math.sin(yaw) * rec * 0.6, Z = f.z - Math.cos(yaw) * rec * 0.6;
       if (i < bm) {
         const a = avatar.clones[i];
-        // animated Bitmoji only bob a little; a static model hops along
         const moving = avatar.animated || avatar.rigged;
-        const hop = run ? Math.abs(Math.sin(ph * 0.5)) * (moving ? 0.05 : 0.22) : 0;
+        const hop = run ? Math.abs(Math.sin(ph * 0.5)) * (moving ? 0.04 : 0.2) : 0;
         a.holder.visible = true;
         a.holder.position.set(X, hop, Z);
-        a.holder.rotation.set(run ? 0.08 : 0, G.face + CFG.AVATAR_YAW, run && !moving ? Math.sin(ph * 0.5) * 0.1 : 0, 'YXZ');
+        a.holder.rotation.set(run ? 0.06 : 0, yaw + CFG.AVATAR_YAW, 0, 'YXZ');
         a.holder.scale.setScalar(grow);
-        animateAvatar(a, run, ph * 0.8, frameDt);
+        animateAvatar(a, run, ph * 0.8, frameDt, rec);
         putShadow(X, Z, 1);
-      } else putMan(W.soldBody, W.soldLeg, nb++, X, Z, G.face, grow, ph, run);
+      } else putMan(W.soldBody, W.soldLeg, nb++, X, Z, yaw, grow, ph, run);
     }
     if (avatar) for (let i = bm; i < avatar.clones.length; i++) avatar.clones[i].holder.visible = false;
     W.soldBody.count = nb; W.soldLeg.count = nb * 2;
@@ -952,17 +1149,27 @@
       } else if (e.kind === 'gate') {
         for (const seg of e.segs) {
           if (np >= W.panels.length) break;
-          const m = W.panels[np++], w = (seg.x2 - seg.x1) * XS, good = seg.v >= 0;
+          const m = W.panels[np++], w = (seg.x2 - seg.x1) * XS;
+          const show = seg.op === '?' && seg.revealed ? seg.hide : seg;
+          const locked = seg.op !== 'add';
+          const col = seg.op === '?' && !seg.revealed ? 0xffc83d : show.op === 'mul' ? 0x22d47a : show.op === 'div' ? 0x9b4dff : show.v >= 0 ? 0x38bdf8 : 0xef2b36;
           m.visible = true; m.position.set((seg.x1 + seg.x2) / 2 * XS, 1.05, z); m.scale.set(w - 0.12, 2.1, 1);
-          m.material.color.set(good ? 0x38bdf8 : 0xef2b36);
-          m.material.opacity = e.used ? (seg.taken ? 0.22 : 0.1) : 0.52 + seg.pulse * 1.6;
-          const pc = tmpC.set(good ? 0x1fa8e0 : 0xc81e28);
+          m.material.color.set(col);
+          m.material.opacity = e.used ? (seg.taken ? 0.22 : 0.1) : (locked ? 0.62 : 0.52) + seg.pulse * 1.6 + seg.ping * 2;
+          // bulletproof gates get thick steel posts
+          const pc = locked ? tmpC.set(0x4a545e) : tmpC.set(show.v >= 0 ? 0x1fa8e0 : 0xc81e28);
           for (const px of [seg.x1, seg.x2]) {
             if (ngp >= 40) break;
-            dummy.position.set(px * XS, 1.15, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+            dummy.position.set(px * XS, 1.15, z); dummy.rotation.set(0, 0, 0); const ps = locked ? 1.8 : 1; dummy.scale.set(ps, 1, ps); dummy.updateMatrix();
             W.gposts.setMatrixAt(ngp, dummy.matrix); W.gposts.setColorAt(ngp++, pc);
           }
-          if (!e.used && z < 190) labels.push({ X: m.position.x, Y: 1.1, Z: z, txt: seg.v >= e.cap ? 'MAX +' + seg.v : (seg.v >= 0 ? '+' : '') + seg.v, size: Math.min(1.25, w * 0.34) * (1 + seg.pulse * 1.5), col: '#fff', max: w });
+          if (!e.used && z < 190) {
+            const txt = seg.op === '?' ? '?' : seg.op === 'mul' ? '\u00d7' + seg.v : seg.op === 'div' ? '\u00f7' + seg.v
+              : seg.v >= e.cap ? 'MAX +' + seg.v : (seg.v >= 0 ? '+' : '') + seg.v;
+            const big = locked ? 1.15 : 1;
+            labels.push({ X: m.position.x, Y: 1.15, Z: z, txt, size: Math.min(1.25, w * 0.34) * big * (1 + seg.pulse * 1.5 + seg.ping), col: '#fff', max: w });
+            if (locked && z < 70) labels.push({ X: m.position.x, Y: 0.35, Z: z, txt: 'BULLETPROOF', size: Math.min(0.3, w * 0.09), col: '#ffe14a' });
+          }
         }
       } else if (e.kind === 'tire') {
         if (e.dead || nt >= W.tires.length) continue;
@@ -980,6 +1187,8 @@
         const sw = walk ? Math.sin(e.ph * 1.6) * 0.6 : 0;
         g.userData.legs[0].rotation.x = sw; g.userData.legs[1].rotation.x = -sw;
         g.userData.mat.emissive.setHex(e.flash > 0 ? 0x664444 : 0x000000);
+        g.userData.gun.position.z = 0.22 - (e.recoil || 0) * 0.5;
+        g.userData.gun.rotation.x = -(e.recoil || 0) * 1.2;
         putShadow(X, z, 5.8);
         if (z < 180) labels.push({ X, Y: 7.2, Z: z, txt: fmt(Math.ceil(e.hp)), size: 1.3, col: '#fff' });
       }
@@ -998,10 +1207,25 @@
     n = 0;
     for (const b of G.bullets) {
       if (n >= 160) break;
-      dummy.position.set(b.x * XS, 0.78, b.z); dummy.rotation.set(0, Math.atan2(b.vx * XS, b.vz), 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+      dummy.position.set(b.x * XS, b.y, b.z); dummy.rotation.set(0, Math.atan2(b.vx * XS, b.vz), 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
       W.bullets.setMatrixAt(n++, dummy.matrix);
     }
     W.bullets.count = n; W.bullets.instanceMatrix.needsUpdate = true;
+    n = 0;
+    for (const b of G.ebul) {
+      if (n >= 24) break;
+      dummy.position.set(b.x, b.y, b.z); dummy.rotation.set(-Math.atan2(b.vy, Math.hypot(b.vx, b.vz)), Math.atan2(b.vx, b.vz), 0, 'YXZ'); dummy.scale.set(1, 1, 1); dummy.updateMatrix();
+      W.ebullets.setMatrixAt(n++, dummy.matrix);
+    }
+    W.ebullets.count = n; W.ebullets.instanceMatrix.needsUpdate = true;
+    n = 0;
+    for (const f of G.flashes) {
+      if (n >= 72) break;
+      const k = f.big * (0.8 + Math.random() * 0.5);
+      dummy.position.set(f.x, f.y, f.z); dummy.rotation.set(0, f.yaw, Math.random() * 3, 'YXZ'); dummy.scale.set(0.08 * k, 0.08 * k, 0.2 * k); dummy.updateMatrix();
+      W.flash.setMatrixAt(n++, dummy.matrix);
+    }
+    W.flash.count = n; W.flash.instanceMatrix.needsUpdate = true;
     // coins pop up and spin
     n = 0;
     for (const c of G.coins) {
@@ -1391,7 +1615,7 @@
   window.addEventListener('resize', resize);
   if (DEBUG) {
     window.__bw = {
-      get G() { return G; }, get screen() { return screen; }, S: () => S, get buttons() { return buttons; }, get avatar() { return avatar; },
+      get G() { return G; }, get screen() { return screen; }, S: () => S, get buttons() { return buttons; }, get avatar() { return avatar; }, get camera() { return camera; }, get renderer() { return renderer; }, get scene() { return scene; },
       startRun, toMenu, uiAction, squadR, buildLevel, loadAvatar, step: (dt) => update(dt),
     };
   }

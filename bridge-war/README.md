@@ -5,8 +5,9 @@ player's own **3D Bitmoji**.
 
 Your squad charges down a suspension bridge and fires on its own. Shoot down
 the red horde guarding each gate, then shoot the gate itself to raise its
-number before you run through. Rolling tires sweep the lanes, and a boss
-waits at the end of every bridge. Coins buy gun upgrades between levels, and
+number before you run through, or gamble on a bulletproof ×2, ÷2 or mystery
+gate. Rolling tires flatten whoever they roll over, and an armed boss waits at
+the end of every bridge. Coins buy gun upgrades between levels, and
 you need them: each boss is much tougher than the last.
 
 ## How to play
@@ -18,24 +19,32 @@ you need them: each boss is much tougher than the last.
 | Buy an upgrade | Tap a card on the level screen |
 | Pause | Pause button, `Esc` or `P` |
 
-- **Shooting is automatic.** Bullets fly up your lane; once enemies charge,
-  the squad auto-aims at the nearest ones. A bullet that kills a soldier with
+- **Shooting is automatic.** Every bullet leaves a real barrel: each shot
+  flashes at the muzzle, kicks that soldier back and flicks out a spent
+  casing. Bullets fly straight up your lane until enemies charge; then the
+  whole squad turns to face them and aims. A bullet that kills a soldier with
   damage to spare carries the rest into the next one.
-- **Gates** add or remove soldiers when you run through them. Every bullet
-  that touches a gate raises its number (`-9` → `-4` → `+3` …) and **stops
-  there**, so a gate also shields whatever is behind it. Each gate has a cap
-  (shown as `MAX`), and the higher it gets, the slower it grows.
+- **Gates** change the squad when you run through them. Every bullet that
+  touches a gate **stops there**.
+  - **Number gates** (`-9`, `+3`) go up with every bullet you put into them,
+    more slowly the higher they get, up to a cap shown as `MAX`.
+  - **Bulletproof gates** can't be changed by shooting: green **×2 / ×3**
+    multiply the squad, purple **÷2 / ÷3** divide it, and gold **?** is a
+    mystery (×2, ÷2, a bonus or a loss), revealed only when you pass. They
+    sit next to number gates, so you keep choosing between raising a gate
+    yourself and taking the gamble.
 - **The horde** stands guard in front of each gate, then charges and homes in
-  on the squad. Every red soldier that reaches you takes one of yours. Hordes
-  get much bigger further along the bridge.
+  on the squad. Every red soldier that reaches you takes one of yours.
 - **Elites** (big, dark red, with a health number) soak up bullets and take
   five soldiers with them.
-- **Tires** roll down the lanes and flatten a quarter of the squad. Shoot them
-  or step aside.
-- **Boss**: at the end of the bridge the squad stops and a horned giant walks
-  at it. He calls in minions, hurls tires down your lane, and once he reaches
-  the squad he stomps it flat a few soldiers at a time. Kill him to clear the
-  level. Lose every soldier and the run ends; you keep the coins you collected.
+- **Tires** roll down a lane and flatten **every soldier in their path**:
+  step the squad out of the way, or shoot them first. The rest of the squad
+  closes ranks afterwards.
+- **Boss**: at the end of the bridge the squad stops and a horned giant with a
+  gun walks at it. He fires three-round bursts at where the squad is standing
+  (move to dodge them), calls in minions, rolls tires down your lane, and
+  stomps soldiers once he reaches you. Kill him to clear the level. Lose every
+  soldier and the run ends; you keep the coins you collected.
 
 ### Upgrades
 
@@ -49,30 +58,37 @@ you need them: each boss is much tougher than the last.
 Levels are built from their number, so a level plays the same on every retry.
 Each one is longer, with bigger hordes, more elites and tires, and a boss with
 far more health (about 9K on level 1, 33K on level 3, 115K on level 5).
-Simulated with perfect steering: level 1 can be won with no upgrades, level 2
-needs about one level of Fire Rate and Damage, level 3 about two, level 5
-about four, level 7 about nine. Real players will need more.
+Simulated with perfect steering (but never dodging the boss's bullets):
+level 1 can be won with no upgrades, level 2 needs one level of Fire Rate and
+Damage, level 5 about four, level 7 about nine.
 
 ### 3D Bitmoji
 
 Inside Snapchat the game asks `snapchat.bitmoji.getAvatarInfo()` and, if the
-player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. The GLB is
-loaded with three.js and the front of the squad becomes a crowd of animated
-copies of the player's Bitmoji:
+player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. The front
+of the squad becomes a crowd of animated copies of the player's Bitmoji, each
+carrying a rifle:
 
-- If the model includes animation clips, the run clip plays (one named
-  run/sprint/jog, else walk, else the first clip), cross-fading to an idle
-  clip on the level screen if there is one.
-- If it has a skeleton but no clips, the game swings the upper leg and upper
-  arm bones it finds by name (left/right, upleg/thigh, upperarm/arm).
-- If it is a plain mesh, the Bitmoji hop along instead.
+- **Arms**: the upper arm, forearm and hand bones are found by name and posed
+  every frame so the right hand is on the grip and the left on the fore-end,
+  whatever the rig's bone axes are (the bones are aimed in world space).
+  The rifle is placed from the arm length, so it sits within reach.
+- **Legs**: if the model includes animation clips, its run clip plays (one
+  named run/sprint/jog, else walk, else the first), cross-fading to an idle
+  clip on the level screen if there is one. If it has a skeleton but no
+  clips, the upper and lower leg bones are swung about the body's sideways
+  axis for a running stride with knee bend.
+- **Shooting**: each shot fires from that Bitmoji's own rifle with a muzzle
+  flash, kicks the rifle (and the arms holding it) back, and ejects a casing.
+  The Bitmoji turn with the squad to face what they're shooting.
+- A plain mesh with no skeleton hops along with the rifle at its side.
 
-Each Bitmoji is a separate animated copy, so they are capped by a triangle
+Each Bitmoji is a separate animated copy, so they're capped by a triangle
 budget (`CFG.AVATAR_TRIS`, at most `CFG.AVATAR_MAX` = 12); soldiers past the cap
 use the built-in model. With no Bitmoji (or outside Snapchat) every soldier
 uses the built-in model. If the model faces the wrong way on some devices, set
-`CFG.AVATAR_YAW`. All three paths were tested with stand-in models; the real
-Bitmoji can only be seen inside Snapchat.
+`CFG.AVATAR_YAW`. All of this was tested with stand-in rigged models; the real
+Bitmoji (and its bone names) can only be checked inside Snapchat.
 
 ## Web Lens requirements covered
 
