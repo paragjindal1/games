@@ -84,30 +84,35 @@ are smaller on the first two levels and grow from there.
 ### 3D Bitmoji
 
 Inside Snapchat the game asks `snapchat.bitmoji.getAvatarInfo()` and, if the
-player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. The front
-of the squad becomes a crowd of animated copies of the player's Bitmoji, each
-carrying a rifle:
+player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. Then
+**every soldier drawn is the player's Bitmoji** carrying a rifle (never mixed
+with the built-in soldier):
 
-- **Arms**: the upper arm, forearm and hand bones are found by name and posed
-  every frame so the right hand is on the grip and the left on the fore-end,
-  whatever the rig's bone axes are (the bones are aimed in world space).
-  The rifle is placed from the arm length, so it sits within reach.
-- **Legs**: if the model includes animation clips, its run clip plays (one
-  named run/sprint/jog, else walk, else the first), cross-fading to an idle
-  clip on the level screen if there is one. If it has a skeleton but no
-  clips, the upper and lower leg bones are swung about the body's sideways
-  axis for a running stride with knee bend.
+- **Arms** are found from the skeleton's shape, not its bone names: the hands
+  are found (by name, or as the bones with three or more finger bones), the
+  chain is walked up the straight arm line to the shoulder (stopping before the
+  collarbone), and the joint nearest the middle is the elbow, so twist bones
+  along the arm are skipped. Every frame the upper arm and elbow are aimed in
+  world space so the right hand is on the grip and the left on the fore-end.
+- **Legs**: the model's run clip plays if it has one (named run/sprint/jog,
+  else walk, else the first clip), cross-fading to an idle clip on the level
+  screen. Without clips, the upper and lower leg bones are swung by hand.
 - **Shooting**: each shot fires from that Bitmoji's own rifle with a muzzle
-  flash, kicks the rifle (and the arms holding it) back, and ejects a casing.
-  The Bitmoji turn with the squad to face what they're shooting.
-- A plain mesh with no skeleton hops along with the rifle at its side.
+  flash, kicks the rifle and arms back, and ejects a casing.
+- **Performance**: up to 24 Bitmoji are drawn (fewer for heavy models,
+  `CFG.AVATAR_TRIS`), and if the phone drops below about 36 fps the game draws
+  3 fewer at a time, down to 6 (`CFG.AVATAR_MIN`). The squad count shown is
+  always the real number; only how many are drawn changes.
 
-Each Bitmoji is a separate animated copy, so they're capped by a triangle
-budget (`CFG.AVATAR_TRIS`, at most `CFG.AVATAR_MAX` = 12); soldiers past the cap
-use the built-in model. With no Bitmoji (or outside Snapchat) every soldier
-uses the built-in model. If the model faces the wrong way on some devices, set
-`CFG.AVATAR_YAW`. All of this was tested with stand-in rigged models; the real
-Bitmoji (and its bone names) can only be checked inside Snapchat.
+**Debug panel**: on the level screen, tap the "Level N" title five times
+quickly to show what the game found in the Bitmoji: triangle and bone counts,
+animation clip names, and the bones used for the arms and legs (or why the
+Bitmoji didn't load). Tap five times again to hide it. A screenshot of this
+panel is what's needed to fix the arms on a rig the game doesn't understand.
+
+Tested with stand-in rigs: Snap-style names with collarbones and twist bones
+(`L_arm_JNT > L_forearm_JNT > L_hand_JNT`), and a rig with meaningless names.
+If the model faces the wrong way on some devices, set `CFG.AVATAR_YAW`.
 
 ## Web Lens requirements covered
 

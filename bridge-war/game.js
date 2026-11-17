@@ -19,9 +19,12 @@
     SAFE_BOTTOM: 0.16,
     // Turn the Bitmoji if Snapchat's model faces the other way (radians).
     AVATAR_YAW: 0,
-    // Triangle budget for Bitmoji soldiers; the rest of the squad uses the built-in model.
-    AVATAR_TRIS: 260000,
-    AVATAR_MAX: 12,
+    // With a Bitmoji, every soldier drawn is a Bitmoji (never mixed with the
+    // built-in soldier). This many at most, fewer for heavy models (triangle
+    // budget), and fewer still if the frame rate drops on the phone.
+    AVATAR_TRIS: 1200000,
+    AVATAR_MAX: 24,
+    AVATAR_MIN: 6,
   };
   const LW = 540;               // logical HUD width
   const MIN_CONTENT_H = 760;    // logical height the HUD needs inside the safe zone
@@ -150,7 +153,7 @@
       if (!info || !info.hasAvatar) return;
       const res = await snap.bitmoji.get3DAvatar();
       if (res && res.url) await loadAvatar(res.url);
-    } catch (e) { console.warn('Bitmoji unavailable:', e && e.message); }
+    } catch (e) { avatarErr = (e && e.message) || String(e); console.warn('Bitmoji unavailable:', avatarErr); }
   }
 
   function writeSave() {
@@ -369,7 +372,7 @@
     const r = 0.3 * Math.sqrt(i), a = i * 2.39996;
     SPOTS.push({ x: Math.cos(a) * r, z: Math.sin(a) * r });
   }
-  const squadR = (n) => (0.3 * Math.sqrt(Math.min(n, MAX_DRAWN)) + 0.25) / XS;   // in logic x
+  const squadR = (n) => (0.3 * Math.sqrt(Math.min(n, drawCap())) + 0.25) / XS;   // in logic x
 
   function addCoins(n, x, z) {
     const v = Math.round(n * revenue());
@@ -408,7 +411,7 @@
     G.x = lerp(G.x, G.tx, Math.min(1, dt * 16));
     G.peak = Math.max(G.peak, G.n);
     // every drawn soldier keeps its own spot; gaps close up after losses
-    const want = Math.min(G.n, MAX_DRAWN);
+    const want = Math.min(G.n, drawCap());
     while (G.form.length < want) G.form.push({ x: rand(-0.15, 0.15), z: rand(-0.15, 0.15), rec: 0 });
     if (G.form.length > want) G.form.length = want;
     const k = Math.min(1, dt * 4);
@@ -706,6 +709,8 @@
   const tmpC = new T.Color();
   const W = {};                // world meshes
   let avatar = null;           // animated Bitmoji copies, once loaded
+  let avatarErr = '';          // why the Bitmoji didn't load, for the debug panel
+  const drawCap = () => (avatar ? avatar.max : MAX_DRAWN);
   let frameDt = 1 / 60;
   let camFov = 60;
 
@@ -919,7 +924,7 @@
           const find = (re) => clips.find((a) => re.test(a.name));
           const runClip = find(/run|sprint|jog/i) || find(/walk/i) || clips[0] || null;
           const idleClip = find(/idle|stand|breath/i) || null;
-          const max = clamp(Math.floor(CFG.AVATAR_TRIS / tris), 1, CFG.AVATAR_MAX);
+          const max = clamp(Math.floor(CFG.AVATAR_TRIS / tris), Math.min(CFG.AVATAR_MIN, CFG.AVATAR_MAX), CFG.AVATAR_MAX);
           if (avatar) for (const a of avatar.clones) scene.remove(a.holder);
           const gunMat = new T.MeshLambertMaterial({ vertexColors: true });
           const clones = [];
@@ -929,7 +934,7 @@
             const fit = new T.Group(), holder = new T.Group();
             fit.scale.setScalar(k); fit.position.set(-c.x * k, -box.min.y * k, -c.z * k);
             fit.add(model); holder.add(fit); scene.add(holder);
-            const a = { holder, mixer: null, run: null, idle: null, rig: rigOf(model) };
+            const a = { holder, mixer: null, run: null, idle: null, rig: rigOf(model, holder) };
             if (runClip) {
               a.mixer = new T.AnimationMixer(model);
               a.run = a.mixer.clipAction(runClip); a.run.play();
@@ -945,8 +950,14 @@
             clones.push(a);
           }
           const r0 = clones[0].rig;
+          let bones = 0;
+          root.traverse((o) => { if (o.isBone) bones++; });
           avatar = {
             max, tris, clones, animated: !!runClip, rigged: r0.legs.length > 0, arms: r0.arms.length,
+            info: {
+              tris: Math.round(tris), bones, copies: max, clips: clips.map((c) => c.name).join(', ') || 'none',
+              run: runClip ? runClip.name : 'none', arms: r0.armNames, legs: r0.legs.map((l) => l.up.name + ' > ' + (l.low ? l.low.name : '-')).join(' | ') || 'none',
+            },
             muzzle: { x: gunAt.pos.x, y: gunAt.pos.y + 0.04 * gunAt.size, z: gunAt.pos.z + 0.62 * gunAt.size },
           };
           resolve(avatar);
@@ -955,28 +966,64 @@
     });
   }
 
-  // Finds the legs and arms by bone name: upper leg + lower leg, upper arm + forearm + hand.
-  function rigOf(model) {
+  // Legs are found by bone name (upper leg + lower leg). Arms are found by the
+  // skeleton's shape so any naming works: find the hands, walk up the straight
+  // arm line to the shoulder, and take the joint nearest the middle as the elbow
+  // (twist bones along the arm are skipped over).
+  function rigOf(model, holder) {
     const all = [];
     model.traverse((o) => { if (o.isBone) all.push(o); });
     const side = (n) => (/left/i.test(n) || /(^|[_.\s-])l([_.\s-]|$)/i.test(n) || /^l[A-Z]/.test(n) ? -1
       : /right/i.test(n) || /(^|[_.\s-])r([_.\s-]|$)/i.test(n) || /^r[A-Z]/.test(n) ? 1 : 0);
     const child = (b) => (b && b.children.find((c) => c.isBone)) || null;
-    const find = (sd, good, fallback, bad) => {
-      const ok = (b) => side(b.name) === sd && !bad.test(b.name);
-      return all.find((x) => ok(x) && good.test(x.name)) || all.find((x) => ok(x) && fallback.test(x.name)) || null;
-    };
-    const legs = [], arms = [];
+    const legs = [];
     for (const sd of [-1, 1]) {
-      const up = find(sd, /up(per)?_?leg|thigh/i, /leg/i, /low|fore|calf|shin|knee|foot|toe/i);
+      const ok = (b) => side(b.name) === sd && !/low|fore|calf|shin|knee|foot|toe/i.test(b.name);
+      const up = all.find((x) => ok(x) && /up(per)?_?leg|thigh/i.test(x.name)) || all.find((x) => ok(x) && /leg/i.test(x.name)) || null;
       const low = child(up);
       if (up) legs.push({ sd, up, low, upRest: up.quaternion.clone(), lowRest: low ? low.quaternion.clone() : null });
-      let arm = find(sd, /up(per)?_?arm/i, /arm/i, /low|fore|hand|finger|shoulder|clavicle/i);
-      if (!arm) arm = child(find(sd, /shoulder|clavicle/i, /shoulder|clavicle/i, /^$/));
-      const fore = child(arm), hand = child(fore);
-      if (arm && fore) arms.push({ sd, up: arm, fore, hand, upRest: arm.quaternion.clone(), foreRest: fore.quaternion.clone() });
     }
-    return { legs, arms };
+    const arms = findArms(all, holder);
+    return { legs, arms, armNames: arms.map((a) => a.up.name + ' > ' + a.fore.name + ' > ' + a.hand.name).join(' | ') || 'none' };
+  }
+
+  function findArms(all, holder) {
+    holder.updateMatrixWorld(true);
+    const P = new Map();
+    for (const b of all) P.set(b, holder.worldToLocal(b.getWorldPosition(new T.Vector3())));
+    const kids = (b) => b.children.filter((c) => c.isBone);
+    const isAnc = (a, b) => { for (let q = b.parent; q; q = q.parent) if (q === a) return true; return false; };
+    let hands = all.filter((b) => /hand|wrist|palm/i.test(b.name) && !/finger|thumb|index|middle|ring|pinky|little|end|tip|nub|twist|ik|target|pole|attach|prop|weapon/i.test(b.name));
+    hands = hands.filter((h) => !hands.some((o) => o !== h && isAnc(o, h)));
+    // no hand names: a hand is a bone with three or more finger bones under it
+    if (hands.length < 2) hands = all.filter((b) => kids(b).length >= 3 && b.parent && b.parent.isBone);
+    const out = [];
+    for (const sd of [1, -1]) {   // +1: right hand (holder -x, the model faces +z), -1: left
+      const cand = hands.filter((h) => -sd * P.get(h).x > 0.05);
+      if (!cand.length) continue;
+      const hand = cand.reduce((a, b) => (-sd * P.get(b).x > -sd * P.get(a).x ? b : a));
+      const hp = P.get(hand), first = hand.parent;
+      if (!first || !first.isBone || !P.get(first)) continue;
+      const dir = hp.clone().sub(P.get(first)).normalize();
+      const chain = [];
+      for (let a = first; a && a.isBone && P.get(a); a = a.parent) {
+        const ap = P.get(a), d = hp.clone().sub(ap);
+        if (d.lengthSq() > 1e-8 && d.normalize().dot(dir) < 0.9) break;   // left the straight arm line
+        if (Math.abs(ap.x) < 0.22 * Math.abs(hp.x)) break;                // reached the collarbone / spine
+        chain.push(a);
+      }
+      if (chain.length < 2) continue;
+      const up = chain[chain.length - 1], len = P.get(up).distanceTo(hp);
+      let fore = null, best = 1e9;
+      for (const j of chain) {
+        if (j === up) continue;
+        const t = Math.abs(P.get(up).distanceTo(P.get(j)) / len - 0.5);
+        if (t < best) { best = t; fore = j; }
+      }
+      if (!fore) continue;
+      out.push({ sd, up, fore, hand, upRest: up.quaternion.clone(), foreRest: fore.quaternion.clone() });
+    }
+    return out;
   }
 
   // Where the rifle goes, in holder space, from the rest pose of the arms.
@@ -1108,7 +1155,7 @@
 
     nShadow = 0; labels.length = 0;
     // the squad
-    const drawn = Math.min(G.form.length, MAX_DRAWN);
+    const drawn = Math.min(G.form.length, drawCap());
     const bm = avatar ? Math.min(drawn, avatar.max) : 0;
     const run = G.running && !(G.wall && !G.wallDone);
     const grow = 1 + G.bump * 0.6;
@@ -1351,6 +1398,11 @@
       writeSave(); SFX.buy();
       return;
     }
+    if (id === 'title') {
+      titleTaps = uiT - titleTapT < 1.2 ? titleTaps + 1 : 1; titleTapT = uiT;
+      if (titleTaps >= 5) { rigDebug = !rigDebug; titleTaps = 0; }
+      return;
+    }
     SFX.click();
     if (id === 'next' || id === 'home') toMenu();
     else if (id === 'pause') paused = true;
@@ -1465,11 +1517,29 @@
     ctx.restore();
   }
 
+  // Tap "Level N" five times for a panel describing the loaded Bitmoji (for support).
+  let rigDebug = false, titleTaps = 0, titleTapT = 0;
+  function drawRigDebug() {
+    const I = avatar && avatar.info;
+    const lines = !snap ? ['No Snapchat API'] : !avatar ? ['Bitmoji not loaded', avatarErr || '(no error reported)'] : [
+      'tris ' + I.tris + '  bones ' + I.bones + '  copies ' + avatar.max + '/' + I.copies,
+      'clips: ' + I.clips, 'run clip: ' + I.run, 'arms: ' + I.arms, 'legs: ' + I.legs,
+    ];
+    ctx.font = `11px ${FD}`;
+    const wrap = [];
+    for (const l of lines) { let cur = ''; for (const w of String(l).split(' ')) { if (ctx.measureText(cur + ' ' + w).width > LW - 56) { wrap.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; } wrap.push(cur); }
+    const h = 16 + wrap.length * 15, y = ST + 176;
+    ctx.fillStyle = 'rgba(23,34,46,0.92)'; rr(16, y, LW - 32, h, 10); ctx.fill();
+    wrap.forEach((l, i) => text(l, 28, y + 16 + i * 15, 11, '#e8f4ff', 'left'));
+  }
+
   function drawMenu() {
     coinCounter();
     iconButton('sound', 12, ST + 8, S.muted ? 'mute' : 'sound');
     if (lbSupported) iconButton('lb', 66, ST + 8, 'trophy');
     text('Level ' + S.level, LW / 2, ST + 88, 44, '#17222e', 'center', '#ffffff', 8);
+    buttons.push({ id: 'title', x: LW / 2 - 110, y: ST + 62, w: 220, h: 52 });
+    if (rigDebug) drawRigDebug();
     // how to play, like the original's hint bar
     const hy = ST + 142;
     ctx.fillStyle = 'rgba(23,34,46,0.72)'; rr(LW / 2 - 168, hy - 24, 336, 48, 12); ctx.fill();
@@ -1623,9 +1693,16 @@
 
   // ================================================================ loop
   let last = performance.now();
+  let slowFor = 0, frameAvg = 1 / 60;
   function frame(t) {
-    const dt = Math.min(0.05, (t - last) / 1000);
+    const raw = (t - last) / 1000, dt = Math.min(0.05, raw);
     last = t;
+    // too slow on this phone? draw fewer Bitmoji (the squad count is unchanged)
+    frameAvg = lerp(frameAvg, Math.min(raw, 0.1), 0.05);
+    if (avatar && screen === 'play' && !paused && frameAvg > 1 / 36) {
+      slowFor += raw;
+      if (slowFor > 2 && avatar.max > CFG.AVATAR_MIN) { avatar.max = Math.max(CFG.AVATAR_MIN, avatar.max - 3); slowFor = 0; }
+    } else slowFor = 0;
     update(dt);
     draw();
     requestAnimationFrame(frame);
