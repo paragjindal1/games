@@ -3,10 +3,11 @@
 A 3D squad runner-shooter built as a **Snapchat Web Lens**, starring the
 player's own **3D Bitmoji**.
 
-Your squad charges down a suspension bridge and fires on its own. Pick a lane:
-bullets raise the gate in front of you, the red horde behind it pours through
-and charges, rolling tires sweep the lanes, and a wall of barrels guards the
-end of the bridge. Coins buy upgrades between levels.
+Your squad charges down a suspension bridge and fires on its own. Shoot down
+the red horde guarding each gate, then shoot the gate itself to raise its
+number before you run through. Rolling tires sweep the lanes, and a boss
+waits at the end of every bridge. Coins buy gun upgrades between levels, and
+you need them: each boss is much tougher than the last.
 
 ## How to play
 
@@ -18,47 +19,60 @@ end of the bridge. Coins buy upgrades between levels.
 | Pause | Pause button, `Esc` or `P` |
 
 - **Shooting is automatic.** Bullets fly up your lane; once enemies charge,
-  the squad auto-aims at the nearest ones.
+  the squad auto-aims at the nearest ones. A bullet that kills a soldier with
+  damage to spare carries the rest into the next one.
 - **Gates** add or remove soldiers when you run through them. Every bullet
-  that flies through a gate raises its number (`-9` → `-4` → `+3` …) and
-  carries on to the horde behind it. Each gate has a cap (shown as `MAX`), and
-  the higher it gets, the slower it grows.
-- **The horde** waits behind each gate, then charges and homes in on the
-  squad. Every red soldier that reaches you takes one of yours. Hordes grow
-  much faster than your squad can, so the back half of the bridge is a real
-  fight.
+  that touches a gate raises its number (`-9` → `-4` → `+3` …) and **stops
+  there**, so a gate also shields whatever is behind it. Each gate has a cap
+  (shown as `MAX`), and the higher it gets, the slower it grows.
+- **The horde** stands guard in front of each gate, then charges and homes in
+  on the squad. Every red soldier that reaches you takes one of yours. Hordes
+  get much bigger further along the bridge.
 - **Elites** (big, dark red, with a health number) soak up bullets and take
   five soldiers with them.
-- **Tires** roll down the lanes and wipe out 40% of the squad. Shoot them or
-  step aside.
-- **Barrel wall**: at the end of the bridge the squad stops. Shoot all three
-  barrels while the last of the horde keeps spawning. Lose every soldier and
-  the run ends; you keep the coins you collected.
+- **Tires** roll down the lanes and flatten a quarter of the squad. Shoot them
+  or step aside.
+- **Boss**: at the end of the bridge the squad stops and a horned giant walks
+  at it. He calls in minions, hurls tires down your lane, and once he reaches
+  the squad he stomps it flat a few soldiers at a time. Kill him to clear the
+  level. Lose every soldier and the run ends; you keep the coins you collected.
 
 ### Upgrades
 
 | Card | Effect per level |
 |---|---|
 | **Fire Rate** | +12% shots per soldier |
-| **Damage** | +20% bullet damage |
+| **Damage** | +17% bullet damage, compounding |
 | **Revenue** | +25% coins |
 | **Squad** | +1 soldier at the start of every run |
 
 Levels are built from their number, so a level plays the same on every retry.
-Each one is longer, with bigger hordes, more elites and tires, and a tougher
-barrel wall. From level 2 on you'll need upgrades.
+Each one is longer, with bigger hordes, more elites and tires, and a boss with
+far more health (about 9K on level 1, 33K on level 3, 115K on level 5).
+Simulated with perfect steering: level 1 can be won with no upgrades, level 2
+needs about one level of Fire Rate and Damage, level 3 about two, level 5
+about four, level 7 about nine. Real players will need more.
 
 ### 3D Bitmoji
 
 Inside Snapchat the game asks `snapchat.bitmoji.getAvatarInfo()` and, if the
-player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. The GLB
-is loaded with three.js, posed once and drawn as instanced meshes, so the front
-of the squad is a crowd of the player's own Bitmoji hopping down the bridge.
-The squad faces the camera on the level screen and turns to run when the level
-starts. To keep phones smooth, Bitmoji are capped by a triangle budget
-(`CFG.AVATAR_TRIS`); soldiers past the budget use the built-in model. If there's
-no Bitmoji (or outside Snapchat), every soldier uses the built-in model.
-If the model faces the wrong way on some devices, set `CFG.AVATAR_YAW`.
+player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. The GLB is
+loaded with three.js and the front of the squad becomes a crowd of animated
+copies of the player's Bitmoji:
+
+- If the model includes animation clips, the run clip plays (one named
+  run/sprint/jog, else walk, else the first clip), cross-fading to an idle
+  clip on the level screen if there is one.
+- If it has a skeleton but no clips, the game swings the upper leg and upper
+  arm bones it finds by name (left/right, upleg/thigh, upperarm/arm).
+- If it is a plain mesh, the Bitmoji hop along instead.
+
+Each Bitmoji is a separate animated copy, so they are capped by a triangle
+budget (`CFG.AVATAR_TRIS`, at most `CFG.AVATAR_MAX` = 12); soldiers past the cap
+use the built-in model. With no Bitmoji (or outside Snapchat) every soldier
+uses the built-in model. If the model faces the wrong way on some devices, set
+`CFG.AVATAR_YAW`. All three paths were tested with stand-in models; the real
+Bitmoji can only be seen inside Snapchat.
 
 ## Web Lens requirements covered
 

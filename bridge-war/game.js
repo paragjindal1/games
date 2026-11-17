@@ -2,7 +2,7 @@
  * Your squad charges down a bridge and fires on its own. Drag left and right
  * to pick a lane: bullets raise the gate in front of you, and once the red
  * horde pours through, the squad auto-aims at it. Dodge the rolling tires,
- * break the barrel wall at the end, and spend coins on upgrades.
+ * beat the boss at the end of the bridge, and spend coins on upgrades.
  * Inside Snapchat the soldiers are the player's own 3D Bitmoji.
  * The world is rendered with three.js; the HUD is a 2D canvas on top. */
 (() => {
@@ -20,6 +20,7 @@
     AVATAR_YAW: 0,
     // Triangle budget for Bitmoji soldiers; the rest of the squad uses the built-in model.
     AVATAR_TRIS: 260000,
+    AVATAR_MAX: 12,
   };
   const LW = 540;               // logical HUD width
   const MIN_CONTENT_H = 760;    // logical height the HUD needs inside the safe zone
@@ -29,8 +30,11 @@
   const RANGE = 72;
   const MAX_SQUAD = 150;
   const MAX_DRAWN = 46;         // soldiers drawn; the rest only count
-  const MAX_SHOTS = 24;         // bullets per second on screen (damage scales up past it)
+  const MAX_SHOTS = 32;         // bullets per second on screen (damage scales up past it)
   const MAX_FOES = 230;
+  const BOSS_HP = 9000;         // level 1; grows steeply each level
+  const BOSS_STOP = 30;         // the squad halts this far from the boss
+  const WAKE = 40;              // a horde charges once the squad is this close
 
   const UP = {
     rate: { name: 'FIRE RATE', col: '#62c23a', dark: '#3c8a1e', base: 120 },
@@ -172,7 +176,7 @@
   // upgrade maths
   const upCost = (k) => Math.round(UP[k].base * Math.pow(1.42, S.up[k]) / 10) * 10;
   const fireRate = () => 2.4 * (1 + 0.12 * S.up.rate);     // shots per soldier per second
-  const bulletDmg = () => 10 * (1 + 0.2 * S.up.dmg);
+  const bulletDmg = () => 10 * Math.pow(1.17, S.up.dmg);      // compounds, to keep up with the bosses
   const revenue = () => 1 + 0.25 * S.up.rev;
   const startSquad = () => 1 + S.up.squad;
 
@@ -260,14 +264,15 @@
     const hpMul = 1 + 0.22 * (L - 1);
     const steps = 6 + Math.min(L, 8);
     const foeHp = Math.round(20 * hpMul);
-    let z = 58;
+    let z = 70;
     for (let i = 0; i < steps; i++) {
-      // a row of gates with the horde waiting right behind it
+      // a row of gates with the horde standing guard in front of it
       const n = i === 0 ? 1 : 1 + (rnd() < 0.7 ? 1 : 0) + (L >= 2 && rnd() < 0.4 ? 1 : 0);
       const good = Math.floor(rnd() * n);
       const segs = [];
       for (let k = 0; k < n; k++) {
-        const v = k === good
+        const v = i === 0 ? -Math.round(1 + rnd() * 2)
+          : k === good
           ? -Math.round(3 + rnd() * 6 + i * 1.6 + L * 0.8)
           : -Math.round(10 + rnd() * 12 + i * 3 + L * 2);
         segs.push({ x1: -1 + (2 / n) * k, x2: -1 + (2 / n) * (k + 1), v, pulse: 0, acc: 0 });
@@ -276,36 +281,36 @@
       // shooting a gate raises it, more slowly the higher it gets, up to its cap
       ents.push({ kind: 'gate', z, segs, used: false, cap: Math.round(7 + i * 1.8 + L) });
       // the horde grows faster than the squad can, so the back half is a real fight
-      const count = i === 0 ? 3 + L : Math.min(120, Math.round(3 + L * 2.5 + 4.6 * Math.pow(i, 1.7)));
-      const depth = 8 + count * 0.28;
+      const count = i === 0 ? 1 + Math.floor(L / 2) : Math.min(120, Math.round(2 + L * 2 + 2.6 * Math.pow(i, 1.5)));
+      const depth = Math.min(22, 6 + count * 0.2);
       for (let k = 0; k < count; k++) {
         ents.push({
-          kind: 'foe', z: z + 13 + rnd() * depth, x: (rnd() - 0.5) * 1.84,
-          hp: Math.round(foeHp * (1 + i * 0.12)), max: foeHp, ph: rnd() * 6, flash: 0, awake: false, sp: 4.6 + rnd() * 1.6 + L * 0.15,
+          kind: 'foe', z: z - 3 - rnd() * depth, x: (rnd() - 0.5) * 1.84,
+          hp: Math.round(foeHp * (1 + i * 0.08)), max: foeHp, ph: rnd() * 6, flash: 0, awake: false, sp: 4.6 + rnd() * 1.6 + L * 0.15,
         });
       }
       // elites: big, slow, and they take five soldiers with them
       const elites = i < 2 ? 0 : Math.min(4, Math.floor((i - 1) / 2 + (L - 1) / 3));
       for (let k = 0; k < elites; k++) {
-        const hp = foeHp * (10 + i * 8);
-        ents.push({ kind: 'foe', elite: true, z: z + 16 + rnd() * depth, x: (rnd() - 0.5) * 1.5, hp, max: hp, ph: rnd() * 6, flash: 0, awake: false, sp: 3.6 });
+        const hp = foeHp * (8 + i * 3);
+        ents.push({ kind: 'foe', elite: true, z: z - 3 - rnd() * depth * 0.6, x: (rnd() - 0.5) * 1.5, hp, max: hp, ph: rnd() * 6, flash: 0, awake: false, sp: 3.6 });
       }
       // tire pairs roll in on the back half of the bridge (anywhere from level 2)
       if (i >= steps - 3 || (L >= 2 && i >= 1 && rnd() < 0.45)) {
         const lanes = [[-0.55, 0.55], [-0.6, 0], [0, 0.6]][Math.floor(rnd() * 3)];
         for (const x of lanes) {
-          const hp = Math.round(180 * hpMul * (1 + i * 0.25));
+          const hp = Math.round(120 * hpMul * (1 + i * 0.15));
           ents.push({ kind: 'tire', z: z + 34 + rnd() * 5, x, hp, max: hp, rot: 0, flash: 0, awake: false });
         }
       }
       z += 48;
     }
-    // the barrel wall that ends the level
-    const bz = z + 6;
-    const bhp = Math.round(3000 * Math.pow(L, 1.2));
-    for (const x of [-0.62, 0, 0.62]) ents.push({ kind: 'barrel', z: bz, x, hp: bhp, max: bhp, flash: 0 });
+    // the boss waits at the end of the bridge; his health is what the upgrades are for
+    const bz = z + 22;
+    const bhp = Math.round(BOSS_HP * Math.pow(1.68, L - 1) * (1 + 0.15 * (L - 1)));
+    ents.push({ kind: 'boss', z: bz, x: 0, hp: bhp, max: bhp, flash: 0, ph: 0, awake: false, bite: 0, throwT: 3, stomp: 0 });
     ents.sort((a, b) => a.z - b.z);
-    return { ents, length: bz - 8, barrelZ: bz, foeHp };
+    return { ents, length: bz - BOSS_STOP, bossZ: bz, foeHp };
   }
 
   // ================================================================ state
@@ -320,10 +325,10 @@
   function freshRun() {
     const lv = buildLevel(S.level);
     return {
-      t: 0, dist: 0, ents: lv.ents, length: lv.length, barrelZ: lv.barrelZ, foeHp: lv.foeHp,
+      t: 0, dist: 0, ents: lv.ents, length: lv.length, bossZ: lv.bossZ, foeHp: lv.foeHp, boss: lv.ents[lv.ents.length - 1],
       n: startSquad(), x: 0, tx: 0, face: Math.PI,
       bullets: [], parts: [], floats: [], coins: [], shotAcc: 0, earned: 0, kills: 0, peak: startSquad(),
-      active: [], targets: [], gateZ: 1e9, wall: false, wallDone: 0, spawnT: 0, over: 0, running: false, panel: 0,
+      active: [], targets: [], lossBy: {}, gateZ: 1e9, wall: false, wallDone: 0, spawnT: 0, over: 0, running: false, panel: 0,
       pop: 0, hurt: 0, bump: 0,
     };
   }
@@ -360,9 +365,10 @@
   }
   function floatText(x, z, txt, col, size = 26, y = 1.6) { G.floats.push({ x, z, y, txt, col, size, t: 0 }); }
 
-  function loseSoldiers(k, show) {
+  function loseSoldiers(k, show, src) {
     if (k <= 0 || G.n <= 0) return;
     k = Math.min(k, G.n);
+    if (src) G.lossBy[src] = (G.lossBy[src] || 0) + k;
     G.n -= k; G.hurt = 0.25;
     puff(G.x, 0, 0x7fc4ff, Math.min(18, 4 + k * 2));
     SFX.lost();
@@ -382,6 +388,7 @@
 
   // Bullets fly straight up the squad's lane (raising the gate there) until
   // something charges; then the squad auto-aims at whatever is coming.
+  // Gates block every bullet, so a horde behind a gate is safe until it comes through.
   function fire(dt) {
     const tg = G.targets;
     const ahead = G.gateZ < RANGE || tg.length > 0;
@@ -418,9 +425,12 @@
     if (e.hp > 0) return;
     if (e.kind === 'foe') killFoe(e, z);
     else if (e.kind === 'tire') { e.dead = true; puff(e.x, z, 0x3a3a3a, 18, 2); addCoins(60, e.x, z); SFX.tire(); }
-    else if (e.kind === 'barrel') {
-      e.dead = true; puff(e.x, z, 0xffa030, 34, 2.6, 0.9); shake = 0.5; SFX.boom();
-      for (let k = 0; k < 8; k++) addCoins(25, e.x + rand(-0.2, 0.2), z + rand(-0.8, 0.8));
+    else if (e.kind === 'boss') {
+      e.dead = true; G.wallDone = 0.001;
+      puff(e.x, z, 0xff3030, 40, 4, 2); puff(e.x, z, 0xffd23a, 30, 3, 2.5); shake = 0.7; SFX.boom();
+      for (let k = 0; k < 16; k++) addCoins(40, e.x + rand(-0.3, 0.3), z + rand(-1.5, 1.5));
+      for (const f of G.ents) if (f.kind !== 'boss' && !f.dead && f.kind !== 'gate') { f.dead = true; puff(f.x, f.z - G.dist, 0xff5a4a, 5); }
+      floatText(0, z, 'BOSS DOWN!', '#ffe14a', 56, 3);
     }
   }
 
@@ -435,11 +445,11 @@
         const z = e.z - G.dist;
         if (z < z0 - 0.6 || z > b.z + 0.6) continue;
         if (e.kind === 'gate') {
-          // bullets raise the gate they fly through and carry on to the horde behind it
-          if (e.used || b.gate === e || z > b.z) continue;
+          // a bullet that touches a gate raises it and stops there
+          if (e.used) continue;
           const seg = e.segs.find((s) => b.x >= s.x1 && b.x < s.x2);
           if (seg) {
-            b.gate = e;
+            hit = true;
             if (seg.v < e.cap) {
               seg.acc += 1;
               const need = seg.v < 0 ? 1 : 1.2 + seg.v * 0.6;
@@ -447,9 +457,13 @@
             }
           }
         } else if (!e.dead) {
-          const half = e.kind === 'barrel' ? 0.27 : e.kind === 'tire' ? 0.27 : e.elite ? 0.19 : 0.095;
+          const half = e.kind === 'boss' ? 0.36 : e.kind === 'tire' ? 0.27 : e.elite ? 0.19 : 0.095;
           if (Math.abs(b.x - e.x) > half) continue;
-          hit = true; hitEnt(e, b, z);
+          // a bullet carries its leftover damage on into the next soldier (never past a gate)
+          const before = e.hp;
+          hitEnt(e, b, z);
+          if (e.kind === 'foe' && e.dead && b.dmg > before + 0.5) { b.dmg -= before; continue; }
+          hit = true;
         }
         if (hit) { if (Math.random() < 0.5) G.parts.push({ x: b.x * XS, y: 0.8, z, vx: rand(-1, 1), vy: rand(0, 2), vz: -2, life: 0.15, max: 0.15, r: 0.1, col: 0xfff3a8 }); break; }
       }
@@ -479,11 +493,11 @@
             const add = Math.min(seg.v, MAX_SQUAD - G.n);
             G.n += add; G.bump = 0.3;
             if (seg.v > 0) { floatText(G.x, 0.6, '+' + seg.v, '#7fe0ff', 36); puff(G.x, 0, 0x9fe6ff, 14); SFX.plus(); }
-          } else { SFX.minus(); loseSoldiers(-seg.v, true); }
+          } else { SFX.minus(); loseSoldiers(-seg.v, true, 'gate'); }
         }
       } else if (e.kind === 'foe') {
         // the horde holds behind its gate, then charges
-        if (!e.awake && z < (e.elite ? 40 : 34)) e.awake = true;
+        if (!e.awake && z < (e.elite ? WAKE + 6 : WAKE)) e.awake = true;
         if (e.awake && G.n > 0) {
           e.z -= e.sp * dt; e.ph += dt * (e.elite ? 7 : 12);
           e.x += clamp((G.x - e.x) * 3, -1, 1) * (e.elite ? 0.8 : 1.3) * dt;
@@ -492,7 +506,7 @@
         const reach = r + (e.elite ? 0.16 : 0.08);
         if (z <= 0.5 && z > -1 && Math.abs(e.x - G.x) < reach && G.n > 0) {
           e.dead = true; puff(e.x, z, 0xff5a4a, 6);
-          loseSoldiers(e.elite ? 5 : 1, e.elite);
+          loseSoldiers(e.elite ? 5 : 1, e.elite, e.elite ? 'elite' : 'foe');
         }
       } else if (e.kind === 'tire') {
         if (!e.awake && z < 75) e.awake = true;
@@ -500,7 +514,7 @@
         z = e.z - G.dist;
         if (z <= 0.6 && z > -1.2 && Math.abs(e.x - G.x) < r + 0.24 && G.n > 0) {
           e.dead = true; shake = 0.45; SFX.tire(); puff(e.x, z, 0x3a3a3a, 16, 2);
-          loseSoldiers(Math.max(3, Math.ceil(G.n * 0.4)), true);
+          loseSoldiers(Math.max(2, Math.ceil(G.n * 0.25)), true, 'tire');
         }
       }
       // what the squad may auto-aim at (sorted by distance below)
@@ -508,23 +522,41 @@
     }
     targets.sort((a, b) => a.z - b.z);
     G.active = act; G.gateZ = gateZ;
-    G.targets = targets.filter((e) => e.awake || e.kind === 'barrel');
+    G.targets = targets.filter((e) => e.awake);
   }
 
-  // At the barrel wall the squad digs in while the last of the horde keeps coming.
-  function updateWall(dt) {
-    const bz = G.barrelZ - G.dist;
-    if (!G.wall && bz <= 9) { G.wall = true; SFX.alarm(); floatText(0, 9, 'BREAK THE WALL!', '#ffe14a', 54, 3); }
-    if (!G.wall || G.wallDone) return;
-    const left = G.ents.filter((e) => e.kind === 'barrel' && !e.dead).length;
-    if (left === 0) { G.wallDone = 0.001; for (const e of G.ents) if (e.kind === 'foe' && !e.dead) killFoe(e, e.z - G.dist); return; }
+  // At the end of the bridge the squad digs in and the boss walks at it,
+  // calling in minions and hurling tires down the squad's lane.
+  function updateBoss(dt) {
+    const B = G.boss;
+    if (!B || B.dead) return;
+    const bz = B.z - G.dist;
+    if (!G.wall && bz <= BOSS_STOP + 0.5) {
+      G.wall = true; B.awake = true; SFX.alarm();
+      floatText(0, 12, 'BOSS FIGHT!', '#ff4040', 60, 3);
+    }
+    if (!G.wall || G.wallDone || G.n <= 0) return;
+    B.ph += dt * 4;
+    B.x = lerp(B.x, clamp(G.x, -0.55, 0.55), Math.min(1, dt * 0.6));
+    if (bz > 2.6) B.z -= (1.5 + S.level * 0.08) * dt;
+    else {
+      // in reach: he stomps the squad flat a few soldiers at a time
+      B.bite += dt * (5 + S.level);
+      while (B.bite >= 1 && G.n > 0) { B.bite -= 1; loseSoldiers(1, false, 'boss'); shake = Math.max(shake, 0.25); }
+    }
     G.spawnT -= dt;
     if (G.spawnT <= 0) {
-      G.spawnT = Math.max(0.16, 0.5 - S.level * 0.03);
-      const side = Math.random() < 0.5 ? -1 : 1;
-      const e = { kind: 'foe', z: G.barrelZ + rand(6, 16), x: side * rand(0.2, 0.95), hp: G.foeHp, max: G.foeHp, ph: rand(0, 6), flash: 0, awake: true, sp: 6 + S.level * 0.2, jump: true };
-      G.ents.push(e);
+      G.spawnT = Math.max(0.18, 0.55 - S.level * 0.03);
+      G.ents.push({ kind: 'foe', z: B.z + rand(-1, 3), x: clamp(B.x + rand(-0.7, 0.7), -0.92, 0.92), hp: G.foeHp, max: G.foeHp, ph: rand(0, 6), flash: 0, awake: true, sp: 5.5 + S.level * 0.2 });
     }
+    B.throwT -= dt;
+    if (B.throwT <= 0 && bz > 6) {
+      B.throwT = Math.max(2.2, 4.2 - S.level * 0.2);
+      const hp = G.foeHp * 9;
+      G.ents.push({ kind: 'tire', z: B.z - 1.5, x: clamp(G.x + rand(-0.1, 0.1), -0.62, 0.62), hp, max: hp, rot: 0, flash: 0, awake: true });
+      B.stomp = 0.4; SFX.tire();
+    }
+    B.stomp = Math.max(0, B.stomp - dt);
   }
 
   function updateFx(dt) {
@@ -555,7 +587,7 @@
       fire(dt);
     }
     updateEnts(G.running ? dt : dt * 0.4);
-    updateWall(dt);
+    updateBoss(dt);
     updateBullets(dt);
     updateFx(dt);
     if (G.wallDone) {
@@ -580,7 +612,8 @@
   const dummy = new T.Object3D();
   const tmpC = new T.Color();
   const W = {};                // world meshes
-  let avatar = null;           // baked Bitmoji pieces, once loaded
+  let avatar = null;           // animated Bitmoji copies, once loaded
+  let frameDt = 1 / 60;
   let camFov = 60;
 
   function inst(geo, mat, n, colors) {
@@ -715,14 +748,23 @@
       spin.add(tyre, hub); spin.rotation.y = Math.PI / 2; g.add(spin); g.userData.spin = spin;
       g.visible = false; scene.add(g); W.tires.push(g);
     }
-    W.barrels = [];
-    for (let i = 0; i < 3; i++) {
-      const g = new T.Group();
-      const b = new T.Mesh(new T.CylinderGeometry(0.75, 0.75, 1.5, 16), lam(0x2c2f34)); b.position.y = 0.75; g.add(b);
-      for (const y of [0.35, 1.15]) { const r = new T.Mesh(new T.CylinderGeometry(0.78, 0.78, 0.16, 16), lam(0xd42a2a)); r.position.y = y; g.add(r); }
-      for (let k = 0; k < 5; k++) { const c = new T.Mesh(new T.CylinderGeometry(0.24, 0.24, 0.07, 12), lam(0xffd23a, { emissive: 0x7a5a00 })); c.position.set(Math.cos(k * 1.26) * 0.3, 1.56 + k * 0.05, Math.sin(k * 1.26) * 0.3); c.rotation.z = (k % 2) * 0.3; g.add(c); }
-      g.visible = false; scene.add(g); W.barrels.push(g);
+    // the boss: a giant in dark red with horns and spiked shoulders
+    const bossGeo = manGeo({ body: 0x8e0f19, leg: 0x5a070d, skin: 0xd9907a, hat: 0x2a0a0e });
+    const bossMat = lam(0xffffff, { vertexColors: true });
+    const boss = new T.Group(), bodyM = new T.Mesh(bossGeo.body, bossMat);
+    boss.add(bodyM);
+    const legs = [-1, 1].map((sd) => { const l = new T.Mesh(bossGeo.leg, bossMat); l.position.set(sd * 0.1, 0.44, 0); boss.add(l); return l; });
+    const horn = lam(0xf2e3c4), spike = lam(0x2a2a2e);
+    for (const sd of [-1, 1]) {
+      const h = new T.Mesh(new T.ConeGeometry(0.05, 0.22, 8), horn); h.position.set(sd * 0.12, 1.16, 0); h.rotation.z = -sd * 0.5; boss.add(h);
+      const pad = new T.Mesh(new T.SphereGeometry(0.11, 10, 8), spike); pad.position.set(sd * 0.24, 0.8, 0); boss.add(pad);
+      const sp = new T.Mesh(new T.ConeGeometry(0.04, 0.14, 6), spike); sp.position.set(sd * 0.27, 0.92, 0); boss.add(sp);
     }
+    for (const sd of [-1, 1]) {
+      const eye = new T.Mesh(new T.SphereGeometry(0.028, 8, 6), new T.MeshBasicMaterial({ color: 0xffd23a })); eye.position.set(sd * 0.065, 1.0, 0.155); boss.add(eye);
+    }
+    boss.userData = { legs, mat: bossMat };
+    boss.visible = false; scene.add(boss); W.boss = boss;
   }
 
   function resize3D(cw, ch, topPx, botPx) {
@@ -740,8 +782,9 @@
     camera.updateProjectionMatrix();
   }
 
-  // Bakes whatever pose the Bitmoji GLB is in into static meshes, so a whole
-  // squad of them can be drawn with instancing.
+  // Loads the Bitmoji GLB and makes one animated copy per Bitmoji soldier.
+  // If the model ships animations, its run (and idle) clips play; if not,
+  // its own leg and arm bones are swung by hand.
   function loadAvatar(url) {
     return new Promise((resolve, reject) => {
       const loader = new T.GLTFLoader();
@@ -750,40 +793,81 @@
         try {
           const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
           root.updateMatrixWorld(true);
-          const pieces = [], v = new T.Vector3(), boxAll = new T.Box3();
           let tris = 0;
           root.traverse((o) => {
-            if (!o.isMesh || !o.geometry || !o.geometry.attributes.position || o.visible === false) return;
-            const src = o.geometry, pos = src.attributes.position, out = new Float32Array(pos.count * 3);
-            if (o.isSkinnedMesh && o.skeleton) o.skeleton.update();
-            for (let i = 0; i < pos.count; i++) {
-              v.fromBufferAttribute(pos, i);
-              if (o.isSkinnedMesh && o.skeleton) o.applyBoneTransform(i, v);
-              v.applyMatrix4(o.matrixWorld);
-              out[i * 3] = v.x; out[i * 3 + 1] = v.y; out[i * 3 + 2] = v.z;
-              boxAll.expandByPoint(v);
-            }
-            const g = new T.BufferGeometry();
-            g.setAttribute('position', new T.BufferAttribute(out, 3));
-            for (const k of ['uv', 'uv1', 'color']) if (src.attributes[k]) g.setAttribute(k, src.attributes[k].clone());
-            if (src.index) g.setIndex(src.index.clone());
-            for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
-            g.computeVertexNormals();
-            tris += (src.index ? src.index.count : pos.count) / 3;
-            pieces.push({ g, mat: o.material });
+            if (!o.isMesh || !o.geometry) return;
+            o.frustumCulled = false;
+            const g = o.geometry;
+            tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
           });
-          const size = boxAll.getSize(new T.Vector3());
-          if (!pieces.length || !(size.y > 1e-4)) throw new Error('empty avatar');
+          const box = new T.Box3().setFromObject(root, true), size = box.getSize(new T.Vector3());
+          if (!tris || !(size.y > 1e-4)) throw new Error('empty avatar');
           // stand it on the ground, centred, 1.15 units tall
-          const k = 1.15 / size.y, c = boxAll.getCenter(new T.Vector3());
-          const m = new T.Matrix4().makeScale(k, k, k).multiply(new T.Matrix4().makeTranslation(-c.x, -boxAll.min.y, -c.z));
-          const max = clamp(Math.floor(CFG.AVATAR_TRIS / Math.max(1, tris)), 1, MAX_DRAWN);
-          if (avatar) for (const p of avatar.meshes) scene.remove(p);
-          avatar = { max, tris, meshes: pieces.map((p) => { p.g.applyMatrix4(m); return inst(p.g, p.mat, max); }) };
+          const k = 1.15 / size.y, c = box.getCenter(new T.Vector3());
+          const clips = gltf.animations || [];
+          const find = (re) => clips.find((a) => re.test(a.name));
+          const runClip = find(/run|sprint|jog/i) || find(/walk/i) || clips[0] || null;
+          const idleClip = find(/idle|stand|breath/i) || null;
+          const max = clamp(Math.floor(CFG.AVATAR_TRIS / tris), 1, CFG.AVATAR_MAX);
+          if (avatar) for (const a of avatar.clones) scene.remove(a.holder);
+          const clones = [];
+          for (let i = 0; i < max; i++) {
+            const model = T.cloneSkinned(root);
+            const fit = new T.Group(), holder = new T.Group();
+            fit.scale.setScalar(k); fit.position.set(-c.x * k, -box.min.y * k, -c.z * k);
+            fit.add(model); holder.add(fit); holder.visible = false; scene.add(holder);
+            const a = { holder, mixer: null, run: null, idle: null, bones: null, ph: Math.random() * 6 };
+            if (runClip) {
+              a.mixer = new T.AnimationMixer(model);
+              a.run = a.mixer.clipAction(runClip); a.run.play();
+              a.run.time = Math.random() * runClip.duration;
+              if (idleClip) { a.idle = a.mixer.clipAction(idleClip); a.idle.play(); a.idle.time = Math.random() * idleClip.duration; }
+            } else a.bones = limbBones(model);
+            clones.push(a);
+          }
+          avatar = { max, tris, clones, animated: !!runClip, rigged: !!(clones[0].bones && clones[0].bones.length) };
           resolve(avatar);
         } catch (e) { reject(e); }
       }, undefined, reject);
     });
+  }
+
+  // Finds the upper leg and upper arm bones on each side by name, for rigs without clips.
+  function limbBones(model) {
+    const all = [];
+    model.traverse((o) => { if (o.isBone) all.push(o); });
+    const side = (n) => (/left/i.test(n) || /(^|[_.\s-])l([_.\s-]|$)/i.test(n) || /^l[A-Z]/.test(n) ? -1
+      : /right/i.test(n) || /(^|[_.\s-])r([_.\s-]|$)/i.test(n) || /^r[A-Z]/.test(n) ? 1 : 0);
+    const pick = (good, fallback, bad) => {
+      const out = [];
+      for (const s of [-1, 1]) {
+        const ok = (b) => side(b.name) === s && !bad.test(b.name);
+        const b = all.find((x) => ok(x) && good.test(x.name)) || all.find((x) => ok(x) && fallback.test(x.name));
+        if (b) out.push(b);
+      }
+      return out;
+    };
+    const legs = pick(/up(per)?_?leg|thigh/i, /leg/i, /low|fore|calf|shin|foot|toe/i);
+    const arms = pick(/up(per)?_?arm/i, /arm|shoulder/i, /low|fore|hand|finger/i);
+    return legs.map((bone, i) => ({ bone, rest: bone.quaternion.clone(), kind: 'leg', s: i ? 1 : -1 }))
+      .concat(arms.map((bone, i) => ({ bone, rest: bone.quaternion.clone(), kind: 'arm', s: i ? 1 : -1 })));
+  }
+
+  const swingQ = new T.Quaternion(), XAXIS = new T.Vector3(1, 0, 0);
+  function animateAvatar(a, run, ph, dt) {
+    if (a.mixer) {
+      // crossfade between run and idle
+      const w = run ? 1 : 0;
+      a.runW = lerp(a.runW === undefined ? w : a.runW, w, Math.min(1, dt * 8));
+      if (a.idle) { a.run.setEffectiveWeight(a.runW); a.idle.setEffectiveWeight(1 - a.runW); a.run.timeScale = 1.25; }
+      else a.run.timeScale = run ? 1.25 : 0.15;
+      a.mixer.update(dt);
+    } else if (a.bones) {
+      for (const b of a.bones) {
+        const ang = run ? Math.sin(ph) * (b.kind === 'leg' ? 0.75 : -0.55) * b.s : Math.sin(uiT * 2 + b.s) * 0.04;
+        b.bone.quaternion.copy(b.rest).multiply(swingQ.setFromAxisAngle(XAXIS, ang));
+      }
+    }
   }
 
   let nShadow = 0;
@@ -827,6 +911,7 @@
     }
     W.posts.count = n; W.posts.instanceMatrix.needsUpdate = true;
     const tFirst = Math.ceil((G.dist - 30 - 70) / 150) * 150 + 70;
+    frameDt = Math.max(0, uiT - (render3D.last || uiT)); render3D.last = uiT;
     W.towers.forEach((g, i) => { g.position.z = tFirst + i * 150 - G.dist; });
 
     nShadow = 0; labels.length = 0;
@@ -839,21 +924,24 @@
     for (let i = 0; i < drawn; i++) {
       const sp = SPOTS[i], X = G.x * XS + sp.x, Z = sp.z, ph = G.t * 13 + i * 1.7;
       if (i < bm) {
-        // Bitmoji soldiers hop along as they run
-        const hop = run ? Math.abs(Math.sin(ph * 0.5)) * 0.22 : Math.sin(uiT * 3 + i) * 0.02;
-        dummy.position.set(X, hop, Z);
-        dummy.rotation.set(run ? 0.14 : 0, G.face + CFG.AVATAR_YAW, run ? Math.sin(ph * 0.5) * 0.1 : 0, 'YXZ');
-        dummy.scale.set(grow, grow, grow); dummy.updateMatrix();
-        for (const m of avatar.meshes) m.setMatrixAt(i, dummy.matrix);
+        const a = avatar.clones[i];
+        // animated Bitmoji only bob a little; a static model hops along
+        const moving = avatar.animated || avatar.rigged;
+        const hop = run ? Math.abs(Math.sin(ph * 0.5)) * (moving ? 0.05 : 0.22) : 0;
+        a.holder.visible = true;
+        a.holder.position.set(X, hop, Z);
+        a.holder.rotation.set(run ? 0.08 : 0, G.face + CFG.AVATAR_YAW, run && !moving ? Math.sin(ph * 0.5) * 0.1 : 0, 'YXZ');
+        a.holder.scale.setScalar(grow);
+        animateAvatar(a, run, ph * 0.8, frameDt);
         putShadow(X, Z, 1);
       } else putMan(W.soldBody, W.soldLeg, nb++, X, Z, G.face, grow, ph, run);
     }
-    if (avatar) for (const m of avatar.meshes) { m.count = bm; m.instanceMatrix.needsUpdate = true; }
+    if (avatar) for (let i = bm; i < avatar.clones.length; i++) avatar.clones[i].holder.visible = false;
     W.soldBody.count = nb; W.soldLeg.count = nb * 2;
     W.soldBody.instanceMatrix.needsUpdate = W.soldLeg.instanceMatrix.needsUpdate = true;
 
     // everything on the bridge
-    let nf = 0, np = 0, nt = 0, nbar = 0, ngp = 0;
+    let nf = 0, np = 0, nt = 0, ngp = 0, bossShown = false;
     for (const e of G.active) {
       const z = e.z - G.dist, X = (e.x || 0) * XS;
       if (e.kind === 'foe') {
@@ -883,11 +971,17 @@
         g.userData.spin.rotation.x = -e.rot;
         putShadow(X, z, 3.6);
         if (z < 130) labels.push({ X, Y: 0.25, Z: z - 1.2, txt: fmt(Math.ceil(e.hp)), size: 0.8, col: '#ff5a4a', stroke: '#fff' });
-      } else if (e.kind === 'barrel') {
-        if (e.dead || nbar >= 3) continue;
-        const g = W.barrels[nbar++], s = e.flash > 0 ? 1.08 : 1;
-        g.visible = true; g.position.set(X, 0, z); g.scale.set(s, s, s);
-        if (z < 150) labels.push({ X, Y: 0.85, Z: z - 0.8, txt: fmt(Math.ceil(e.hp)), size: 0.55, col: '#fff' });
+      } else if (e.kind === 'boss') {
+        if (e.dead) continue;
+        const g = W.boss, s = 5.6 * (e.flash > 0 ? 1.03 : 1), walk = e.awake && z > 2.6;
+        g.visible = true; bossShown = true;
+        g.position.set(X, walk ? Math.abs(Math.cos(e.ph * 1.6)) * 0.2 : 0, z);
+        g.rotation.set(e.stomp > 0 ? 0.18 : 0, Math.PI, 0, 'YXZ'); g.scale.setScalar(s);
+        const sw = walk ? Math.sin(e.ph * 1.6) * 0.6 : 0;
+        g.userData.legs[0].rotation.x = sw; g.userData.legs[1].rotation.x = -sw;
+        g.userData.mat.emissive.setHex(e.flash > 0 ? 0x664444 : 0x000000);
+        putShadow(X, z, 5.8);
+        if (z < 180) labels.push({ X, Y: 7.2, Z: z, txt: fmt(Math.ceil(e.hp)), size: 1.3, col: '#fff' });
       }
     }
     W.foeBody.count = nf; W.foeLeg.count = nf * 2;
@@ -896,7 +990,7 @@
     if (W.foeLeg.instanceColor) W.foeLeg.instanceColor.needsUpdate = true;
     for (let i = np; i < W.panels.length; i++) W.panels[i].visible = false;
     for (let i = nt; i < W.tires.length; i++) W.tires[i].visible = false;
-    for (let i = nbar; i < 3; i++) W.barrels[i].visible = false;
+    if (!bossShown) W.boss.visible = false;
     W.gposts.count = ngp; W.gposts.instanceMatrix.needsUpdate = true; if (W.gposts.instanceColor) W.gposts.instanceColor.needsUpdate = true;
     W.shadow.count = nShadow; W.shadow.instanceMatrix.needsUpdate = true;
 
@@ -1164,7 +1258,7 @@
       upIcon(k, cw / 2, 66);
       // five pips fill up, then the badge number climbs
       for (let p = 0; p < 5; p++) {
-        ctx.fillStyle = p < S.up[k] % 5 || (S.up[k] > 0 && S.up[k] % 5 === 0 && false) ? (can ? '#eaffd0' : '#d0d6dc') : 'rgba(0,0,0,0.3)';
+        ctx.fillStyle = p < S.up[k] % 5 ? (can ? '#eaffd0' : '#d0d6dc') : 'rgba(0,0,0,0.3)';
         rr(7 + p * ((cw - 14) / 5), 102, (cw - 14) / 5 - 3, 9, 3); ctx.fill();
       }
       ctx.fillStyle = '#17222e'; ctx.beginPath(); ctx.arc(cw - 6, 2, 15, 0, Math.PI * 2); ctx.fill();
@@ -1193,6 +1287,17 @@
     ctx.fillStyle = '#dfe7ee'; rr(x, y, w, 16, 4); ctx.fill();
     ctx.fillStyle = '#2f8fe6'; rr(x, y, Math.max(8, w * p), 16, 4); ctx.fill();
     text(Math.round(p * 100) + '%', x + w / 2, y + 9, 11, '#17222e');
+    // boss health
+    const B = G.boss;
+    if (G.wall && B && !B.dead) {
+      const bw = 300, bx = LW / 2 - bw / 2, by = y + 66;
+      ctx.fillStyle = '#17222e'; rr(bx - 4, by - 4, bw + 8, 30, 8); ctx.fill();
+      ctx.fillStyle = '#4a1418'; rr(bx, by, bw, 22, 6); ctx.fill();
+      const q = clamp(B.hp / B.max, 0, 1);
+      ctx.fillStyle = B.flash > 0 ? '#ff8a8a' : '#ff3b3b'; rr(bx, by, Math.max(10, bw * q), 22, 6); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; rr(bx + 3, by + 2, Math.max(4, bw * q - 6), 7, 3); ctx.fill();
+      label('BOSS  ' + fmt(Math.max(0, Math.ceil(B.hp))), LW / 2, by + 12, 15);
+    }
     // squad size
     soldierIcon(x + w / 2 - 26, y + 50, 26);
     label(String(G.n), x + w / 2 - 6, y + 39, 22, G.hurt > 0 ? '#ff6a6a' : '#fff', 'left');
