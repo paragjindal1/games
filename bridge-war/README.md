@@ -112,7 +112,12 @@ Bitmoji (and its bone names) can only be checked inside Snapchat.
   `CFG.SAFE_TOP` / `CFG.SAFE_BOTTOM` (12% of the screen height at the top and
   16% at the bottom, or the device's safe-area insets if larger), set at the
   top of `game.js`. Only sky, sea and bridge reach under Snapchat's controls.
-  The 3D camera is shifted so the squad sits above the bottom bar.
+  Every frame the 3D view slides so the front row of the squad (Bitmoji
+  included) stands just inside the bottom safe line while playing, and clear
+  above the upgrade cards on the level screen, so no button or panel ever
+  covers a soldier. Checked on 360×640, 375×667, 390×844, 412×915, 768×1024
+  and 1280×720: every button (level screen, HUD, pause, win and lose cards)
+  is inside the safe zone, and the whole squad is visible.
   Add `#safe` to the URL to see the zone.
 - Portrait layout that scales to tall phones and centres on wide screens.
   Touch, mouse and keyboard all work. Audio starts on the first tap, and the

@@ -890,9 +890,7 @@
     const hfov = 50 * Math.PI / 180;
     camFov = clamp(2 * Math.atan(Math.tan(hfov / 2) / aspect) * 180 / Math.PI, 42, 82);
     camera.fov = camFov; camera.aspect = aspect;
-    // shift the picture so the squad sits clear of Snapchat's bottom bar
-    const shift = (botPx - topPx) * 0.5 + ch * 0.04;
-    camera.setViewOffset(cw, ch, 0, shift, cw, ch);
+    // the vertical framing is set every frame in frameSquad()
     camera.updateProjectionMatrix();
   }
 
@@ -1095,6 +1093,7 @@
     const cx = G.x * XS * 0.45;
     camera.position.set(cx + sx, 6.4 + sy, -8.8);
     camera.lookAt(cx, 1.0, 13);
+    frameSquad();
     W.roadTex.offset.y = (G.dist / 8) % 1;
     W.seaTex.offset.y = (G.dist / 27 + uiT * 0.02) % 1;
     // rail posts and towers slide past
@@ -1246,6 +1245,27 @@
     W.parts.count = n; W.parts.instanceMatrix.needsUpdate = true; if (W.parts.instanceColor) W.parts.instanceColor.needsUpdate = true;
 
     renderer.render(scene, camera);
+  }
+
+  // Slides the picture up or down so the front row of the squad stands just
+  // inside Snapchat's bottom safe line while playing, and clear above the
+  // upgrade cards on the level screen. Nothing of the squad ends up under UI.
+  const CARDS_H = 176;          // upgrade cards: they sit this far above the bottom safe line
+  function squadFeetTarget() {
+    return screen === 'menu' ? LH - SB - CARDS_H - 22 : LH - SB - 30;
+  }
+  function frameSquad() {
+    const cw = Math.max(1, window.innerWidth), ch = Math.max(1, window.innerHeight);
+    camera.setViewOffset(cw, ch, 0, 0, cw, ch);
+    camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+    // the nearest feet: the front edge of the formation
+    const front = -(squadR(Math.max(1, G.n)) * XS - 0.1);
+    const p = project(G.x * XS, 0, front);
+    if (!p) return;
+    const want = (p.y - squadFeetTarget()) * scale;          // CSS px to slide the view by
+    G.camShift = G.camShift === undefined ? want : lerp(G.camShift, want, Math.min(1, frameDt * 6));
+    camera.setViewOffset(cw, ch, 0, G.camShift, cw, ch);
+    camera.updateProjectionMatrix();
   }
 
   // Projects a world point onto the HUD canvas; k is HUD px per world unit there.
@@ -1465,7 +1485,7 @@
     }
     label('TO START', LW / 2 + 92, hy + 1, 20);
     // upgrade cards, just above Snapchat's bottom bar
-    const cw = 122, gap = 8, total = cw * 4 + gap * 3, x0 = LW / 2 - total / 2, y = LH - SB - 176;
+    const cw = 122, gap = 8, total = cw * 4 + gap * 3, x0 = LW / 2 - total / 2, y = LH - SB - CARDS_H;
     UP_KEYS.forEach((k, i) => {
       const u = UP[k], x = x0 + i * (cw + gap), cost = upCost(k), can = S.coins >= cost;
       const popK = G.pop > 0 && G.popKey === k ? 1 + G.pop * 0.25 : 1;
@@ -1593,8 +1613,8 @@
       ctx.globalAlpha = clamp(toastMsg.t * 2, 0, 1);
       ctx.font = `15px ${FD}`;
       const w = ctx.measureText(toastMsg.msg).width + 40;
-      ctx.fillStyle = 'rgba(23,34,46,0.9)'; rr(LW / 2 - w / 2, LH - SB - 230, w, 38, 19); ctx.fill();
-      text(toastMsg.msg, LW / 2, LH - SB - 210, 15, '#fff');
+      ctx.fillStyle = 'rgba(23,34,46,0.9)'; rr(LW / 2 - w / 2, ST + 176, w, 38, 19); ctx.fill();
+      text(toastMsg.msg, LW / 2, ST + 196, 15, '#fff');
       ctx.globalAlpha = 1;
     }
     if (SHOW_SAFE) {
@@ -1615,7 +1635,7 @@
   window.addEventListener('resize', resize);
   if (DEBUG) {
     window.__bw = {
-      get G() { return G; }, get screen() { return screen; }, S: () => S, get buttons() { return buttons; }, get avatar() { return avatar; }, get camera() { return camera; }, get renderer() { return renderer; }, get scene() { return scene; },
+      get G() { return G; }, get screen() { return screen; }, S: () => S, get buttons() { return buttons; }, get avatar() { return avatar; }, get camera() { return camera; }, layout: () => ({ ST, SB, LH, LW, VW, offX, scale, cards: LH - SB - CARDS_H }), project, get renderer() { return renderer; }, get scene() { return scene; },
       startRun, toMenu, uiAction, squadR, buildLevel, loadAvatar, step: (dt) => update(dt),
     };
   }
