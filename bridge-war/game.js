@@ -19,12 +19,7 @@
     SAFE_BOTTOM: 0.16,
     // Turn the Bitmoji if Snapchat's model faces the other way (radians).
     AVATAR_YAW: 0,
-    // With a Bitmoji, every soldier drawn is a Bitmoji (never mixed with the
-    // built-in soldier). This many at most, fewer for heavy models (triangle
-    // budget), and fewer still if the frame rate drops on the phone.
-    AVATAR_TRIS: 1200000,
-    AVATAR_MAX: 24,
-    AVATAR_MIN: 6,
+    // With a Bitmoji, every soldier in the squad is drawn as the player's Bitmoji.
   };
   const LW = 540;               // logical HUD width
   const MIN_CONTENT_H = 760;    // logical height the HUD needs inside the safe zone
@@ -33,7 +28,6 @@
   const BULLET_SPEED = 52;
   const RANGE = 72;
   const MAX_SQUAD = 150;
-  const MAX_DRAWN = 46;         // soldiers drawn; the rest only count
   const MAX_SHOTS = 32;         // bullets per second on screen (damage scales up past it)
   const MAX_FOES = 230;
   const BOSS_HP = 7200;         // level 1; grows steeply each level
@@ -354,7 +348,7 @@
       t: 0, dist: 0, ents: lv.ents, length: lv.length, bossZ: lv.bossZ, foeHp: lv.foeHp, boss: lv.ents[lv.ents.length - 1],
       n: startSquad(), x: 0, tx: 0, face: Math.PI, aim: 0, form: [], flashes: [], ebul: [],
       bullets: [], parts: [], floats: [], coins: [], shotAcc: 0, earned: 0, kills: 0, peak: startSquad(),
-      active: [], targets: [], lossBy: {}, gateZ: 1e9, wall: false, wallDone: 0, spawnT: 0, over: 0, running: false, panel: 0,
+      active: [], targets: [], lossBy: {}, dying: [], gateZ: 1e9, wall: false, wallDone: 0, spawnT: 0, over: 0, running: false, panel: 0,
       pop: 0, hurt: 0, bump: 0,
     };
   }
@@ -366,13 +360,11 @@
     SFX.go();
   }
 
-  // Soldiers stand in a tight spiral around the squad's centre (world units).
-  const SPOTS = [];
-  for (let i = 0; i < MAX_DRAWN; i++) {
-    const r = 0.3 * Math.sqrt(i), a = i * 2.39996;
-    SPOTS.push({ x: Math.cos(a) * r, z: Math.sin(a) * r });
-  }
-  const squadR = (n) => (0.3 * Math.sqrt(Math.min(n, drawCap())) + 0.25) / XS;   // in logic x
+  // Every soldier is drawn, standing in a spiral around the squad's centre
+  // (world units); the crowd packs tighter as it grows so it fits the bridge.
+  const spacing = (n) => clamp(0.3 - (n - 30) * 0.0009, 0.19, 0.3);
+  const spotOf = (i, n) => { const r = spacing(n) * Math.sqrt(i), a = i * 2.39996; return { x: Math.cos(a) * r, z: Math.sin(a) * r }; };
+  const squadR = (n) => (spacing(n) * Math.sqrt(Math.max(1, n)) + 0.25) / XS;   // in logic x
 
   function addCoins(n, x, z) {
     const v = Math.round(n * revenue());
@@ -391,12 +383,26 @@
   }
   function floatText(x, z, txt, col, size = 26, y = 1.6) { G.floats.push({ x, z, y, txt, col, size, t: 0 }); }
 
-  function loseSoldiers(k, show, src) {
+  // Removes k soldiers. The ones who die are the ones nearest to where the hit
+  // landed (at = world {x, z}); without a point, random soldiers fall. Each one
+  // topples over (or is flattened, for tires) before it disappears.
+  function loseSoldiers(k, show, src, at, how) {
     if (k <= 0 || G.n <= 0) return;
     k = Math.min(k, G.n);
     if (src) G.lossBy[src] = (G.lossBy[src] || 0) + k;
+    for (let j = 0; j < k && G.form.length > G.n - k && how !== 'none'; j++) {
+      let idx = Math.floor(Math.random() * G.form.length);
+      if (at) {
+        let best = 1e9;
+        G.form.forEach((f, i) => { const d = Math.hypot(G.x * XS + f.x - at.x, f.z - at.z); if (d < best) { best = d; idx = i; } });
+      }
+      const f = G.form.splice(idx, 1)[0];
+      const fx = G.x * XS + f.x;
+      G.dying.push({ x: fx, z: f.z, t: 0, how: how || 'fall', dir: at ? Math.sign(fx - at.x) || 1 : Math.random() < 0.5 ? -1 : 1, ph: f.ph });
+      for (let q = 0; q < 3; q++) G.parts.push({ x: fx, y: 0.6, z: f.z, vx: rand(-1.5, 1.5), vy: rand(1, 2.5), vz: rand(-1, 1), life: 0.4, max: 0.4, r: 0.07, col: 0x7fc4ff });
+    }
+    if (G.dying.length > 90) G.dying.splice(0, G.dying.length - 90);
     G.n -= k; G.hurt = 0.25;
-    puff(G.x, 0, 0x7fc4ff, Math.min(18, 4 + k * 2));
     SFX.lost();
     if (show) floatText(G.x, 0.5, '-' + k, '#ff4040', 30);
     if (G.n <= 0) { G.over = 0.001; G.running = false; shake = 0.5; SFX.lose(); }
@@ -410,13 +416,12 @@
     G.tx = clamp(G.tx, -lim, lim);
     G.x = lerp(G.x, G.tx, Math.min(1, dt * 16));
     G.peak = Math.max(G.peak, G.n);
-    // every drawn soldier keeps its own spot; gaps close up after losses
-    const want = Math.min(G.n, drawCap());
-    while (G.form.length < want) G.form.push({ x: rand(-0.15, 0.15), z: rand(-0.15, 0.15), rec: 0 });
-    if (G.form.length > want) G.form.length = want;
+    // one entry per soldier: newcomers appear in the middle, gaps close up after deaths
+    while (G.form.length < G.n) G.form.push({ x: rand(-0.15, 0.15), z: rand(-0.15, 0.15), rec: 0, ph: Math.random() });
+    if (G.form.length > G.n) G.form.length = G.n;
     const k = Math.min(1, dt * 4);
     for (let i = 0; i < G.form.length; i++) {
-      const f = G.form[i], sp = SPOTS[i];
+      const f = G.form[i], sp = spotOf(i, G.n);
       f.x = lerp(f.x, sp.x, k); f.z = lerp(f.z, sp.z, k); f.rec = Math.max(0, f.rec - dt);
     }
     // no auto-aim: the squad always faces straight down the bridge
@@ -437,7 +442,7 @@
     while (G.shotAcc >= 1) {
       G.shotAcc -= 1;
       const i = Math.floor(Math.random() * G.form.length), f = G.form[i];
-      const m = avatar && i < avatar.max ? avatar.muzzle : SOLDIER_MUZZLE;
+      const m = avatar ? avatar.muzzle : SOLDIER_MUZZLE;
       const mx = G.x * XS + f.x + m.x * cy + m.z * sy, my = m.y, mz = f.z - m.x * sy + m.z * cy;
       const dx = sy + rand(-0.012, 0.012), dz = cy;
       G.bullets.push({ x: clamp(mx / XS, -0.99, 0.99), y: my, z: mz, vx: dx * BULLET_SPEED / XS, vz: dz * BULLET_SPEED, dmg, life: RANGE / BULLET_SPEED });
@@ -560,7 +565,7 @@
         const reach = r + (e.elite ? 0.16 : 0.08);
         if (z <= 0.5 && z > -1 && Math.abs(e.x - G.x) < reach && G.n > 0) {
           e.dead = true; puff(e.x, z, 0xff5a4a, 6);
-          loseSoldiers(e.elite ? 5 : 1, e.elite, e.elite ? 'elite' : 'foe');
+          loseSoldiers(e.elite ? 5 : 1, e.elite, e.elite ? 'elite' : 'foe', { x: e.x * XS, z: 0.5 });
         }
       } else if (e.kind === 'tire') {
         if (!e.awake && z < 75) e.awake = true;
@@ -572,13 +577,13 @@
           const tx = e.x * XS, under = [];
           G.form.forEach((f, i) => { if (Math.abs(G.x * XS + f.x - tx) < TIRE_HALF) under.push(i); });
           if (under.length) {
-            const k = Math.max(under.length, Math.round(under.length * G.n / Math.max(1, G.form.length)));
             for (let j = under.length - 1; j >= 0; j--) {
               const f = G.form[under[j]];
-              for (let q = 0; q < 5; q++) G.parts.push({ x: G.x * XS + f.x + rand(-0.15, 0.15), y: 0.15, z: f.z + rand(-0.15, 0.15), vx: rand(-2.5, 2.5), vy: rand(1, 3), vz: rand(-2, 1), life: rand(0.35, 0.6), max: 0.6, r: rand(0.07, 0.12), col: q % 2 ? 0x2196f3 : 0xa9b8c2 });
+              for (let q = 0; q < 4; q++) G.parts.push({ x: G.x * XS + f.x + rand(-0.15, 0.15), y: 0.15, z: f.z + rand(-0.15, 0.15), vx: rand(-2.5, 2.5), vy: rand(1, 3), vz: rand(-2, 1), life: rand(0.35, 0.6), max: 0.6, r: rand(0.07, 0.12), col: q % 2 ? 0x2196f3 : 0xa9b8c2 });
+              G.dying.push({ x: G.x * XS + f.x, z: f.z, t: 0, how: 'flat', dir: 1, ph: f.ph });
               G.form.splice(under[j], 1);
             }
-            shake = 0.45; SFX.tire(); loseSoldiers(k, true, 'tire');
+            shake = 0.45; SFX.tire(); loseSoldiers(under.length, true, 'tire', null, 'none');
           }
         }
       }
@@ -609,7 +614,7 @@
     else {
       // in reach: he stomps the squad flat a few soldiers at a time
       B.bite += dt * (5 + S.level);
-      while (B.bite >= 1 && G.n > 0) { B.bite -= 1; loseSoldiers(1, false, 'boss'); shake = Math.max(shake, 0.25); }
+      while (B.bite >= 1 && G.n > 0) { B.bite -= 1; loseSoldiers(1, false, 'boss', { x: B.x * XS, z: 3 }, 'flat'); shake = Math.max(shake, 0.25); }
     }
     G.spawnT -= dt;
     if (G.spawnT <= 0) {
@@ -649,12 +654,13 @@
       if (b.z > 0.9) continue;
       G.ebul.splice(i, 1);
       for (let q = 0; q < 6; q++) G.parts.push({ x: b.x, y: Math.max(0.2, b.y), z: b.z, vx: rand(-2, 2), vy: rand(1, 3), vz: rand(-2, 2), life: 0.3, max: 0.3, r: 0.08, col: 0xff6a3a });
-      if (Math.abs(b.x - G.x * XS) < squadR(G.n) * XS + 0.15 && G.n > 0) loseSoldiers(1 + Math.floor((S.level - 1) / 4), false, 'bossgun');
+      if (Math.abs(b.x - G.x * XS) < squadR(G.n) * XS + 0.15 && G.n > 0) loseSoldiers(1 + Math.floor((S.level - 1) / 4), false, 'bossgun', { x: b.x, z: Math.max(0, b.z) });
     }
   }
 
   function updateFx(dt) {
     for (let i = G.flashes.length - 1; i >= 0; i--) { G.flashes[i].t -= dt; if (G.flashes[i].t <= 0) G.flashes.splice(i, 1); }
+    for (let i = G.dying.length - 1; i >= 0; i--) { G.dying[i].t += dt; if (G.dying[i].t > 1.1) G.dying.splice(i, 1); }
     for (let i = G.parts.length - 1; i >= 0; i--) {
       const p = G.parts[i];
       p.life -= dt; if (p.life <= 0) { G.parts.splice(i, 1); continue; }
@@ -710,7 +716,6 @@
   const W = {};                // world meshes
   let avatar = null;           // animated Bitmoji copies, once loaded
   let avatarErr = '';          // why the Bitmoji didn't load, for the debug panel
-  const drawCap = () => (avatar ? avatar.max : MAX_DRAWN);
   let frameDt = 1 / 60;
   let camFov = 60;
 
@@ -830,10 +835,10 @@
     const sold = manGeo({ body: 0xa9b8c2, leg: 0x1e7fd6, skin: 0xf0b9a0, hat: 0x2196f3, gun: true });
     const foe = manGeo({ body: 0xe8262e, leg: 0xb3151f, skin: 0xf0b9a0, hat: 0xd81e26 });
     const vc = () => lam(0xffffff, { vertexColors: true });
-    W.soldBody = inst(sold.body, vc(), MAX_DRAWN); W.soldLeg = inst(sold.leg, vc(), MAX_DRAWN * 2);
+    W.soldBody = inst(sold.body, vc(), MAX_SQUAD + 90); W.soldLeg = inst(sold.leg, vc(), (MAX_SQUAD + 90) * 2);
     W.foeBody = inst(foe.body, vc(), MAX_FOES, true); W.foeLeg = inst(foe.leg, vc(), MAX_FOES * 2, true);
     const blob = new T.CircleGeometry(0.3, 14); blob.rotateX(-Math.PI / 2);
-    W.shadow = inst(blob, new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }), MAX_FOES + MAX_DRAWN + 12);
+    W.shadow = inst(blob, new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2, depthWrite: false }), MAX_FOES + MAX_SQUAD + 100);
     // bullets, coins, particles
     W.bullets = inst(new T.BoxGeometry(0.07, 0.07, 1.1), new T.MeshBasicMaterial({ color: 0xfff2a0 }), 160);
     W.ebullets = inst(new T.BoxGeometry(0.2, 0.2, 1.8), new T.MeshBasicMaterial({ color: 0xff5a2a }), 24);
@@ -897,10 +902,12 @@
     camera.updateProjectionMatrix();
   }
 
-  // Loads the Bitmoji GLB and makes one animated copy per Bitmoji soldier.
-  // Each copy holds a rifle: its arms are posed onto the gun every frame, its
-  // legs run (the model's own run clip if it has one, otherwise its leg bones
-  // are swung by hand), and each shot kicks it back.
+  // Loads the Bitmoji GLB and bakes it once into a short run cycle (and a
+  // standing pose) with both hands on a rifle. Each baked frame is drawn as an
+  // instanced mesh, so every soldier in the squad can be the player's Bitmoji,
+  // however many there are. The model's own run clip drives the legs if it
+  // has one; otherwise its leg bones are swung by hand.
+  const RUN_FRAMES = 12;
   function loadAvatar(url) {
     return new Promise((resolve, reject) => {
       const loader = new T.GLTFLoader();
@@ -909,56 +916,69 @@
         try {
           const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
           root.updateMatrixWorld(true);
-          let tris = 0;
+          const parts = [];
+          let tris = 0, bones = 0;
           root.traverse((o) => {
-            if (!o.isMesh || !o.geometry) return;
-            o.frustumCulled = false;
+            if (o.isBone) bones++;
+            if (!o.isMesh || !o.geometry || !o.geometry.attributes.position || o.visible === false) return;
+            parts.push(o);
             const g = o.geometry;
             tris += (g.index ? g.index.count : g.attributes.position.count) / 3;
           });
           const box = new T.Box3().setFromObject(root, true), size = box.getSize(new T.Vector3());
           if (!tris || !(size.y > 1e-4)) throw new Error('empty avatar');
-          // stand it on the ground, centred, 1.15 units tall
+          // stand it on the ground, centred, 1.15 units tall, inside a holder at the origin
           const k = 1.15 / size.y, c = box.getCenter(new T.Vector3());
+          const fit = new T.Group(), holder = new T.Group();
+          fit.scale.setScalar(k); fit.position.set(-c.x * k, -box.min.y * k, -c.z * k);
+          fit.add(root); holder.add(fit); holder.updateMatrixWorld(true);
+          const rig = rigOf(root, holder);
+          const gunAt = gunSpot(holder, rig);
           const clips = gltf.animations || [];
           const find = (re) => clips.find((a) => re.test(a.name));
           const runClip = find(/run|sprint|jog/i) || find(/walk/i) || clips[0] || null;
           const idleClip = find(/idle|stand|breath/i) || null;
-          const max = clamp(Math.floor(CFG.AVATAR_TRIS / tris), Math.min(CFG.AVATAR_MIN, CFG.AVATAR_MAX), CFG.AVATAR_MAX);
-          if (avatar) for (const a of avatar.clones) scene.remove(a.holder);
-          const gunMat = new T.MeshLambertMaterial({ vertexColors: true });
-          const clones = [];
-          let gunAt = null;
-          for (let i = 0; i < max; i++) {
-            const model = T.cloneSkinned(root);
-            const fit = new T.Group(), holder = new T.Group();
-            fit.scale.setScalar(k); fit.position.set(-c.x * k, -box.min.y * k, -c.z * k);
-            fit.add(model); holder.add(fit); scene.add(holder);
-            const a = { holder, mixer: null, run: null, idle: null, rig: rigOf(model, holder) };
-            if (runClip) {
-              a.mixer = new T.AnimationMixer(model);
-              a.run = a.mixer.clipAction(runClip); a.run.play();
-              a.run.time = Math.random() * runClip.duration;
-              if (idleClip) { a.idle = a.mixer.clipAction(idleClip); a.idle.play(); a.idle.time = Math.random() * idleClip.duration; }
+          const mixer = runClip ? new T.AnimationMixer(root) : null;
+          const run = runClip ? mixer.clipAction(runClip) : null, idle = idleClip ? mixer.clipAction(idleClip) : null;
+          if (run) run.play();
+          if (idle) idle.play();
+          const pose = (phase, running) => {
+            if (mixer) {
+              if (run) { run.setEffectiveWeight(running || !idle ? 1 : 0); run.time = running ? phase * runClip.duration : 0; }
+              if (idle) { idle.setEffectiveWeight(running ? 0 : 1); idle.time = 0; }
+              mixer.update(0);
             }
-            // place the rifle in front of the chest, within reach of the hands
-            if (!gunAt) gunAt = gunSpot(holder, a.rig);
-            a.gun = new T.Mesh(W.gunGeo, gunMat);
-            a.gun.scale.setScalar(gunAt.size); a.gun.position.copy(gunAt.pos);
-            holder.add(a.gun); a.gunZ = gunAt.pos.z;
-            holder.visible = false;
-            clones.push(a);
-          }
-          const r0 = clones[0].rig;
-          let bones = 0;
-          root.traverse((o) => { if (o.isBone) bones++; });
+            holder.updateMatrixWorld(true);
+            if (!mixer && rig.legs.length) {
+              AXIS.set(1, 0, 0);
+              for (const L of rig.legs) {
+                const p = phase * Math.PI * 2 + (L.sd < 0 ? 0 : Math.PI);
+                swingBone(L.up, L.upRest, AXIS, running ? -0.75 * Math.sin(p) : 0);
+                if (L.low) swingBone(L.low, L.lowRest, AXIS, running ? 0.2 + 0.95 * Math.max(0, Math.cos(p)) : 0.05);
+              }
+            }
+            holdRifle(holder, rig, gunAt);
+            holder.updateMatrixWorld(true);
+            return parts.map(bakeMesh);
+          };
+          const frames = [];
+          for (let f = 0; f < RUN_FRAMES; f++) frames.push(pose(f / RUN_FRAMES, true));
+          const stand = pose(0, false);
+          if (avatar) for (const m of avatar.meshes) { scene.remove(m); m.dispose(); }
+          const meshes = [];
+          const instOf = (geos) => geos.map((g, pi) => { const m = inst(g, parts[pi].material, MAX_SQUAD + 80); meshes.push(m); return m; });
+          const gunMat = new T.MeshLambertMaterial({ vertexColors: true });
+          const gunM = new T.Matrix4().compose(gunAt.pos, new T.Quaternion(), new T.Vector3(gunAt.size, gunAt.size, gunAt.size));
+          const gun = inst(W.gunGeo, gunMat, MAX_SQUAD + 80); meshes.push(gun);
           avatar = {
-            max, tris, clones, animated: !!runClip, rigged: r0.legs.length > 0, arms: r0.arms.length,
-            info: {
-              tris: Math.round(tris), bones, copies: max, clips: clips.map((c) => c.name).join(', ') || 'none',
-              run: runClip ? runClip.name : 'none', arms: r0.armNames, legs: r0.legs.map((l) => l.up.name + ' > ' + (l.low ? l.low.name : '-')).join(' | ') || 'none',
-            },
+            frames: frames.map(instOf), stand: instOf(stand), gun, gunM, meshes,
+            // run cycles per second; a clip plays a little fast, like the built-in soldier
+            rate: runClip ? 1.25 / Math.max(0.2, runClip.duration) : 1.7,
             muzzle: { x: gunAt.pos.x, y: gunAt.pos.y + 0.04 * gunAt.size, z: gunAt.pos.z + 0.62 * gunAt.size },
+            info: {
+              tris: Math.round(tris), bones, parts: parts.length, clips: clips.map((cl) => cl.name).join(', ') || 'none',
+              run: runClip ? runClip.name : 'none', arms: rig.armNames, legs: rig.legs.map((l) => l.up.name + ' > ' + (l.low ? l.low.name : '-')).join(' | ') || 'none',
+            },
           };
           resolve(avatar);
         } catch (e) { reject(e); }
@@ -966,10 +986,29 @@
     });
   }
 
+  // Copies the mesh's current (skinned) shape into a plain geometry in holder space.
+  const vBake = new T.Vector3();
+  function bakeMesh(o) {
+    const src = o.geometry, pos = src.attributes.position, out = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      vBake.fromBufferAttribute(pos, i);
+      if (o.isSkinnedMesh) o.applyBoneTransform(i, vBake);
+      vBake.applyMatrix4(o.matrixWorld);
+      out[i * 3] = vBake.x; out[i * 3 + 1] = vBake.y; out[i * 3 + 2] = vBake.z;
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(out, 3));
+    for (const key of ['uv', 'uv1', 'uv2', 'color']) if (src.attributes[key]) g.setAttribute(key, src.attributes[key]);
+    if (src.index) g.setIndex(src.index);
+    for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+    g.computeVertexNormals();
+    return g;
+  }
+
   // Legs are found by bone name (upper leg + lower leg). Arms are found by the
-  // skeleton's shape so any naming works: find the hands, walk up the straight
-  // arm line to the shoulder, and take the joint nearest the middle as the elbow
-  // (twist bones along the arm are skipped over).
+  // skeleton's shape so any naming works: find the hands, walk up the arm to
+  // the shoulder (stopping before the collarbone), and take the joint nearest
+  // the middle as the elbow (twist bones along the arm are skipped over).
   function rigOf(model, holder) {
     const all = [];
     model.traverse((o) => { if (o.isBone) all.push(o); });
@@ -1002,24 +1041,27 @@
       const cand = hands.filter((h) => -sd * P.get(h).x > 0.05);
       if (!cand.length) continue;
       const hand = cand.reduce((a, b) => (-sd * P.get(b).x > -sd * P.get(a).x ? b : a));
-      const hp = P.get(hand), first = hand.parent;
-      if (!first || !first.isBone || !P.get(first)) continue;
-      const dir = hp.clone().sub(P.get(first)).normalize();
+      const hp = P.get(hand);
+      // walk up toward the body; the arm may be bent in its rest pose
       const chain = [];
-      for (let a = first; a && a.isBone && P.get(a); a = a.parent) {
-        const ap = P.get(a), d = hp.clone().sub(ap);
-        if (d.lengthSq() > 1e-8 && d.normalize().dot(dir) < 0.9) break;   // left the straight arm line
-        if (Math.abs(ap.x) < 0.22 * Math.abs(hp.x)) break;                // reached the collarbone / spine
+      for (let a = hand.parent; a && a.isBone && P.get(a); a = a.parent) {
+        if (Math.abs(P.get(a).x) < 0.22 * Math.abs(hp.x)) break;   // reached the collarbone / spine
         chain.push(a);
       }
       if (chain.length < 2) continue;
-      const up = chain[chain.length - 1], len = P.get(up).distanceTo(hp);
+      const up = chain[chain.length - 1];
+      // the elbow: the joint nearest the middle of the arm, by length along the bones
+      const along = [0];
+      let pts = [hp, ...chain.map((j) => P.get(j))];
+      for (let i = 1; i < pts.length; i++) along.push(along[i - 1] + pts[i].distanceTo(pts[i - 1]));
+      const total = along[along.length - 1];
       let fore = null, best = 1e9;
-      for (const j of chain) {
-        if (j === up) continue;
-        const t = Math.abs(P.get(up).distanceTo(P.get(j)) / len - 0.5);
+      chain.forEach((j, i) => {
+        if (j === up) return;
+        const t = Math.abs(along[i + 1] / total - 0.5);
         if (t < best) { best = t; fore = j; }
-      }
+      });
+      pts = null;
       if (!fore) continue;
       out.push({ sd, up, fore, hand, upRest: up.quaternion.clone(), foreRest: fore.quaternion.clone() });
     }
@@ -1034,8 +1076,8 @@
       let sx = 0, sy = 0, reach = 0;
       for (const a of rig.arms) {
         a.up.getWorldPosition(v); holder.worldToLocal(v); sx += v.x; sy += v.y;
-        const e = a.fore.getWorldPosition(new T.Vector3()), h = (a.hand || a.fore).getWorldPosition(new T.Vector3());
-        reach += a.up.getWorldPosition(new T.Vector3()).distanceTo(e) + e.distanceTo(h);
+        const s = a.up.getWorldPosition(new T.Vector3()), e = a.fore.getWorldPosition(new T.Vector3()), h = a.hand.getWorldPosition(new T.Vector3());
+        reach += s.distanceTo(e) + e.distanceTo(h);
       }
       sx /= rig.arms.length; sy /= rig.arms.length; reach /= rig.arms.length;
       reach = Math.max(reach, 0.18);
@@ -1066,45 +1108,18 @@
     bone.quaternion.copy(qP.invert().multiply(qB));
     bone.updateMatrixWorld(true);
   }
-
-  function animateAvatar(a, run, ph, dt, rec) {
-    const rig = a.rig;
-    if (a.mixer) {
-      // crossfade between run and idle
-      const w = run ? 1 : 0;
-      a.runW = lerp(a.runW === undefined ? w : a.runW, w, Math.min(1, dt * 8));
-      if (a.idle) { a.run.setEffectiveWeight(a.runW); a.idle.setEffectiveWeight(1 - a.runW); a.run.timeScale = 1.25; }
-      else a.run.timeScale = run ? 1.25 : 0.15;
-      a.mixer.update(dt);
-    }
-    a.holder.updateMatrixWorld(true);
-    // legs: swung about the body's sideways axis, knees bending on the forward swing
-    if (!a.mixer && rig.legs.length) {
-      AXIS.set(1, 0, 0).applyQuaternion(a.holder.quaternion);
-      for (const L of rig.legs) {
-        const p = ph + (L.sd < 0 ? 0 : Math.PI);
-        swingBone(L.up, L.upRest, AXIS, run ? -0.75 * Math.sin(p) : 0);
-        if (L.low) swingBone(L.low, L.lowRest, AXIS, run ? 0.2 + 0.95 * Math.max(0, Math.cos(p)) : 0.05);
-      }
-    }
-    // arms: both hands on the rifle, which kicks back when it fires
-    a.gun.position.z = a.gunZ - rec * 0.5;
-    a.gun.rotation.x = -rec * 0.8;
-    a.holder.updateMatrixWorld(true);
-    const gs = a.gun.scale.x;
+  // Both hands on the rifle: right on the grip, left on the fore-end.
+  function holdRifle(holder, rig, gunAt) {
+    const gs = gunAt.size;
     for (const A of rig.arms) {
       A.up.quaternion.copy(A.upRest); A.fore.quaternion.copy(A.foreRest); A.up.updateMatrixWorld(true);
-      // right hand on the grip, left hand on the fore-end
-      vT.set(0, -0.06, A.sd > 0 ? -0.02 : 0.24).multiplyScalar(gs).add(a.gun.position);
-      a.holder.localToWorld(vT);
-      A.up.getWorldPosition(vE);
+      const target = new T.Vector3(0, -0.06, A.sd > 0 ? -0.02 : 0.24).multiplyScalar(gs).add(gunAt.pos);
+      holder.localToWorld(target);
       // elbow: halfway there, dropped a little and pushed out to the side
-      const target = vT.clone();
-      vE.lerp(target, 0.5);
-      vA.set(A.sd > 0 ? -1 : 1, -1, 0).normalize().multiplyScalar(0.07 * gs * 2).applyQuaternion(a.holder.quaternion);
-      vE.add(vA);
+      A.up.getWorldPosition(vE);
+      vE.lerp(target, 0.5).add(vA.set(A.sd > 0 ? -1 : 1, -1, 0).normalize().multiplyScalar(0.14 * gs));
       pointBone(A.up, A.fore, vE);
-      pointBone(A.fore, A.hand || A.fore, target);
+      pointBone(A.fore, A.hand, target);
     }
   }
 
@@ -1130,6 +1145,7 @@
     putShadow(X, Z, s);
   }
 
+  const mGun = new T.Matrix4();
   const WHITE = new T.Color(0xffffff), ELITE = new T.Color(0.62, 0.5, 0.5), HIT = new T.Color(1.6, 1.6, 1.6);
   const labels = [];           // text to draw on the HUD canvas at projected points
 
@@ -1154,30 +1170,46 @@
     W.towers.forEach((g, i) => { g.position.z = tFirst + i * 150 - G.dist; });
 
     nShadow = 0; labels.length = 0;
-    // the squad
-    const drawn = Math.min(G.form.length, drawCap());
-    const bm = avatar ? Math.min(drawn, avatar.max) : 0;
+    // the squad: every soldier, Bitmoji or built-in
     const run = G.running && !(G.wall && !G.wallDone);
     const grow = 1 + G.bump * 0.6;
     const yaw = G.face + G.aim;
     let nb = 0;
-    for (let i = 0; i < drawn; i++) {
+    if (avatar) { for (const m of avatar.meshes) m.count = 0; }
+    const putBitmoji = (frame, X, Y, Z, rx, ry, rz, sc, sy) => {
+      dummy.position.set(X, Y, Z); dummy.rotation.set(rx, ry + CFG.AVATAR_YAW, rz, 'YXZ'); dummy.scale.set(sc, sc * (sy || 1), sc); dummy.updateMatrix();
+      for (const m of frame) m.setMatrixAt(m.count++, dummy.matrix);
+      mGun.multiplyMatrices(dummy.matrix, avatar.gunM);
+      avatar.gun.setMatrixAt(avatar.gun.count++, mGun);
+    };
+    for (let i = 0; i < G.form.length; i++) {
       const f = G.form[i], rec = f.rec || 0, ph = G.t * 13 + i * 1.7;
       // recoil nudges each soldier back along its line of fire
       const X = G.x * XS + f.x - Math.sin(yaw) * rec * 0.6, Z = f.z - Math.cos(yaw) * rec * 0.6;
-      if (i < bm) {
-        const a = avatar.clones[i];
-        const moving = avatar.animated || avatar.rigged;
-        const hop = run ? Math.abs(Math.sin(ph * 0.5)) * (moving ? 0.04 : 0.2) : 0;
-        a.holder.visible = true;
-        a.holder.position.set(X, hop, Z);
-        a.holder.rotation.set(run ? 0.06 : 0, yaw + CFG.AVATAR_YAW, 0, 'YXZ');
-        a.holder.scale.setScalar(grow);
-        animateAvatar(a, run, ph * 0.8, frameDt, rec);
+      if (avatar) {
+        const cyc = (G.t * avatar.rate + f.ph) % 1;
+        const hop = run ? Math.abs(Math.sin(cyc * Math.PI * 2)) * 0.04 : 0;
+        putBitmoji(run ? avatar.frames[Math.floor(cyc * RUN_FRAMES) % RUN_FRAMES] : avatar.stand, X, hop, Z, run ? 0.06 : 0, yaw, 0, grow);
         putShadow(X, Z, 1);
       } else putMan(W.soldBody, W.soldLeg, nb++, X, Z, yaw, grow, ph, run);
     }
-    if (avatar) for (let i = bm; i < avatar.clones.length; i++) avatar.clones[i].holder.visible = false;
+    // the fallen: they topple away from the hit (or are flattened) and sink away
+    for (const d of G.dying) {
+      const k = clamp(d.t / 0.35, 0, 1), sink = Math.max(0, d.t - 0.65) * 1.6;
+      const flat = d.how === 'flat';
+      if (avatar) {
+        if (flat) putBitmoji(avatar.stand, d.x, -sink * 0.3, d.z, 0, yaw, 0, 1, Math.max(0.12, 1 - k * 1.2));
+        else putBitmoji(avatar.stand, d.x, -sink, d.z, -k * 1.45, yaw, d.dir * k * 0.4, 1);
+      } else {
+        dummy.position.set(d.x, -sink * (flat ? 0.3 : 1), d.z);
+        dummy.rotation.set(flat ? 0 : -k * 1.45, yaw, flat ? 0 : d.dir * k * 0.4, 'YXZ');
+        dummy.scale.set(1, flat ? Math.max(0.12, 1 - k * 1.2) : 1, 1); dummy.updateMatrix();
+        W.soldBody.setMatrixAt(nb, dummy.matrix);
+        for (let q = 0; q < 2; q++) W.soldLeg.setMatrixAt(nb * 2 + q, dummy.matrix);
+        nb++;
+      }
+    }
+    if (avatar) for (const m of avatar.meshes) m.instanceMatrix.needsUpdate = true;
     W.soldBody.count = nb; W.soldLeg.count = nb * 2;
     W.soldBody.instanceMatrix.needsUpdate = W.soldLeg.instanceMatrix.needsUpdate = true;
 
@@ -1522,7 +1554,7 @@
   function drawRigDebug() {
     const I = avatar && avatar.info;
     const lines = !snap ? ['No Snapchat API'] : !avatar ? ['Bitmoji not loaded', avatarErr || '(no error reported)'] : [
-      'tris ' + I.tris + '  bones ' + I.bones + '  copies ' + avatar.max + '/' + I.copies,
+      'tris ' + I.tris + '  bones ' + I.bones + '  parts ' + I.parts + '  squad ' + (G ? G.n : 0),
       'clips: ' + I.clips, 'run clip: ' + I.run, 'arms: ' + I.arms, 'legs: ' + I.legs,
     ];
     ctx.font = `11px ${FD}`;
@@ -1693,16 +1725,9 @@
 
   // ================================================================ loop
   let last = performance.now();
-  let slowFor = 0, frameAvg = 1 / 60;
   function frame(t) {
-    const raw = (t - last) / 1000, dt = Math.min(0.05, raw);
+    const dt = Math.min(0.05, (t - last) / 1000);
     last = t;
-    // too slow on this phone? draw fewer Bitmoji (the squad count is unchanged)
-    frameAvg = lerp(frameAvg, Math.min(raw, 0.1), 0.05);
-    if (avatar && screen === 'play' && !paused && frameAvg > 1 / 36) {
-      slowFor += raw;
-      if (slowFor > 2 && avatar.max > CFG.AVATAR_MIN) { avatar.max = Math.max(CFG.AVATAR_MIN, avatar.max - 3); slowFor = 0; }
-    } else slowFor = 0;
     update(dt);
     draw();
     requestAnimationFrame(frame);

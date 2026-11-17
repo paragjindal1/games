@@ -85,29 +85,40 @@ are smaller on the first two levels and grow from there.
 
 Inside Snapchat the game asks `snapchat.bitmoji.getAvatarInfo()` and, if the
 player has a Bitmoji, loads it with `snapchat.bitmoji.get3DAvatar()`. Then
-**every soldier drawn is the player's Bitmoji** carrying a rifle (never mixed
-with the built-in soldier):
+**every soldier in the squad is the player's Bitmoji**: the number on screen
+is the number of Bitmoji you see (up to the 150 cap), and every soldier who
+dies is a Bitmoji you watch fall.
 
+- **Baked once, drawn instanced**: at load, the Bitmoji is posed and baked
+  into 12 frames of a run cycle plus a standing pose, each with both hands on
+  a rifle. Each soldier is drawn as one instance of one of those frames, each
+  at its own point in the run cycle, so 150 Bitmoji cost about as many draw
+  calls as one. The rifle is one more instanced mesh.
 - **Arms** are found from the skeleton's shape, not its bone names: the hands
   are found (by name, or as the bones with three or more finger bones), the
-  chain is walked up the straight arm line to the shoulder (stopping before the
-  collarbone), and the joint nearest the middle is the elbow, so twist bones
-  along the arm are skipped. Every frame the upper arm and elbow are aimed in
-  world space so the right hand is on the grip and the left on the fore-end.
-- **Legs**: the model's run clip plays if it has one (named run/sprint/jog,
-  else walk, else the first clip), cross-fading to an idle clip on the level
-  screen. Without clips, the upper and lower leg bones are swung by hand.
-- **Shooting**: each shot fires from that Bitmoji's own rifle with a muzzle
-  flash, kicks the rifle and arms back, and ejects a casing.
-- **Performance**: up to 24 Bitmoji are drawn (fewer for heavy models,
-  `CFG.AVATAR_TRIS`), and if the phone drops below about 36 fps the game draws
-  3 fewer at a time, down to 6 (`CFG.AVATAR_MIN`). The squad count shown is
-  always the real number; only how many are drawn changes.
+  chain is walked up toward the body until the collarbone, and the joint
+  nearest the middle of the arm is the elbow, so twist bones are skipped and
+  bent rest poses work. The upper arm and elbow are aimed in world space so
+  the right hand is on the grip and the left on the fore-end.
+- **Legs**: the model's run clip if it has one (named run/sprint/jog, else
+  walk, else the first clip), or its upper and lower leg bones swung by hand.
+  On the level screen the squad stands with the idle clip (or the rest pose).
+- **Deaths**: the soldiers who die are the ones nearest to where the hit
+  landed: the one a red soldier runs into, the five an elite runs into, the
+  ones a boss round lands on, the ones the boss stomps. They topple over away
+  from the hit and sink into the bridge; tires and stomps flatten them. Gates
+  that cost soldiers take them at random.
+- **Recoil**: each shot kicks that soldier back, with a muzzle flash and a
+  casing from its rifle.
+
+The crowd packs tighter as it grows so 150 still fit on the bridge. Every
+soldier counts as triangles on the GPU, so a very large squad with a heavy
+Bitmoji is the most demanding moment for a phone.
 
 **Debug panel**: on the level screen, tap the "Level N" title five times
-quickly to show what the game found in the Bitmoji: triangle and bone counts,
-animation clip names, and the bones used for the arms and legs (or why the
-Bitmoji didn't load). Tap five times again to hide it. A screenshot of this
+quickly to show what the game found in the Bitmoji: triangle, bone and part
+counts, animation clip names, and the bones used for the arms and legs (or why
+the Bitmoji didn't load). Tap five times again to hide it. A screenshot of this
 panel is what's needed to fix the arms on a rig the game doesn't understand.
 
 Tested with stand-in rigs: Snap-style names with collarbones and twist bones
