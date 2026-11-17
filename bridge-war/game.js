@@ -33,9 +33,10 @@
   const MAX_DRAWN = 46;         // soldiers drawn; the rest only count
   const MAX_SHOTS = 32;         // bullets per second on screen (damage scales up past it)
   const MAX_FOES = 230;
-  const BOSS_HP = 9000;         // level 1; grows steeply each level
+  const BOSS_HP = 7200;         // level 1; grows steeply each level
   const BOSS_STOP = 30;         // the squad halts this far from the boss
   const WAKE = 40;              // a horde charges once the squad is this close
+  const LUNGE = 9;              // charging soldiers only veer toward the squad this close
   const TIRE_HALF = 0.7;        // a tire flattens every soldier within this many world units of its centre line
   const BOSS_SCALE = 5.6;
   const BOSS_MUZZLE = { x: 0.24, y: 0.67, z: 1.27 };      // in the boss model's own units
@@ -179,11 +180,14 @@
   }
 
   // upgrade maths
-  const upCost = (k) => Math.round(UP[k].base * Math.pow(1.42, S.up[k]) / 10) * 10;
+  // Coins are scarce on purpose: a level pays for about one upgrade, so later
+  // levels are won by replaying earlier ones and choosing upgrades carefully.
+  const COIN = { foe: 2, elite: 12, tire: 8, boss: 60, clear: 40 };
+  const upCost = (k) => Math.round(UP[k].base * Math.pow(1.36, S.up[k]) / 10) * 10;
   const fireRate = () => 2.4 * (1 + 0.12 * S.up.rate);     // shots per soldier per second
   const bulletDmg = () => 10 * Math.pow(1.17, S.up.dmg);      // compounds, to keep up with the bosses
   const revenue = () => 1 + 0.25 * S.up.rev;
-  const startSquad = () => 1 + S.up.squad;
+  const startSquad = () => 2 + S.up.squad;
 
   // ================================================================ audio
   let audio = null, master = null, noiseBuf = null;
@@ -300,7 +304,7 @@
       // shooting a gate raises it, more slowly the higher it gets, up to its cap
       ents.push({ kind: 'gate', z, segs, used: false, cap: Math.round(7 + i * 1.8 + L) });
       // the horde grows faster than the squad can, so the back half is a real fight
-      const count = i === 0 ? 1 + Math.floor(L / 2) : Math.min(130, Math.round(2 + L * 2.5 + 3.1 * Math.pow(i, 1.5)));
+      const count = i === 0 ? 1 + Math.floor(L / 4) : Math.min(130, Math.round((2 + L * 2.5 + 3.1 * Math.pow(i, 1.5)) * Math.min(1, 0.5 + 0.18 * L)));
       const depth = Math.min(22, 6 + count * 0.2);
       for (let k = 0; k < count; k++) {
         ents.push({
@@ -309,16 +313,16 @@
         });
       }
       // elites: big, slow, and they take five soldiers with them
-      const elites = i < 2 ? 0 : Math.min(4, Math.floor((i - 1) / 2 + (L - 1) / 3));
+      const elites = i < 3 ? 0 : Math.min(4, Math.floor((i - 2) / 2 + (L - 1) / 3));
       for (let k = 0; k < elites; k++) {
-        const hp = foeHp * (8 + i * 3);
+        const hp = foeHp * (6 + i * 2);
         ents.push({ kind: 'foe', elite: true, z: z - 3 - rnd() * depth * 0.6, x: (rnd() - 0.5) * 1.5, hp, max: hp, ph: rnd() * 6, flash: 0, awake: false, sp: 3.6 });
       }
       // tire pairs roll in on the back half of the bridge (anywhere from level 2)
       if (i >= steps - 3 || (L >= 2 && i >= 1 && rnd() < 0.45)) {
         const lanes = [[-0.55, 0.55], [-0.6, 0], [0, 0.6]][Math.floor(rnd() * 3)];
         for (const x of lanes) {
-          const hp = Math.round(120 * hpMul * (1 + i * 0.15));
+          const hp = Math.round(80 * hpMul * (1 + i * 0.12));
           ents.push({ kind: 'tire', z: z + 34 + rnd() * 5, x, hp, max: hp, rot: 0, flash: 0, awake: false });
         }
       }
@@ -326,7 +330,7 @@
     }
     // the boss waits at the end of the bridge; his health is what the upgrades are for
     const bz = z + 22;
-    const bhp = Math.round(BOSS_HP * Math.pow(1.68, L - 1) * (1 + 0.15 * (L - 1)));
+    const bhp = Math.round(BOSS_HP * Math.pow(1.6, Math.min(L, 6) - 1) * Math.pow(1.4, Math.max(0, L - 6)) * (1 + 0.15 * (L - 1)));
     ents.push({ kind: 'boss', z: bz, x: 0, hp: bhp, max: bhp, flash: 0, ph: 0, awake: false, bite: 0, throwT: 3, stomp: 0 });
     ents.sort((a, b) => a.z - b.z);
     return { ents, length: bz - BOSS_STOP, bossZ: bz, foeHp };
@@ -412,19 +416,16 @@
       const f = G.form[i], sp = SPOTS[i];
       f.x = lerp(f.x, sp.x, k); f.z = lerp(f.z, sp.z, k); f.rec = Math.max(0, f.rec - dt);
     }
-    // the squad turns to face what it's shooting at
-    const t = G.targets[0];
-    const aim = t && G.running ? clamp(Math.atan2((t.x - G.x) * XS, Math.max(2, t.z - G.dist)), -0.7, 0.7) : 0;
-    G.aim = lerp(G.aim, aim, Math.min(1, dt * 8));
+    // no auto-aim: the squad always faces straight down the bridge
+    G.aim = 0;
   }
 
-  // Every bullet leaves a real barrel: straight up the lane (raising the gate
-  // there) until something charges, then aimed at whatever is coming. Each shot
+  // Every bullet leaves a real barrel and flies straight ahead: there is no
+  // auto-aim, so the player steers the squad to line up its shots. Each shot
   // kicks the soldier back, flashes at the muzzle and flicks out a casing.
   // Gates block every bullet, so a horde behind a gate is safe until it comes through.
   function fire(dt) {
-    const tg = G.targets;
-    if (!(G.gateZ < RANGE || tg.length > 0) || !G.form.length) return;
+    if (!(G.gateZ < RANGE || G.targets.length > 0) || !G.form.length) return;
     const shots = G.n * fireRate();
     const shown = Math.min(shots, MAX_SHOTS);
     const dmg = bulletDmg() * (shots / shown);
@@ -435,13 +436,7 @@
       const i = Math.floor(Math.random() * G.form.length), f = G.form[i];
       const m = avatar && i < avatar.max ? avatar.muzzle : SOLDIER_MUZZLE;
       const mx = G.x * XS + f.x + m.x * cy + m.z * sy, my = m.y, mz = f.z - m.x * sy + m.z * cy;
-      let dx = sy, dz = cy;
-      if (tg.length) {
-        const t = tg[Math.floor(Math.random() * Math.min(tg.length, 7))];
-        const tx = t.x * XS - mx, tz = Math.max(1, t.z - G.dist - mz), d = Math.hypot(tx, tz);
-        dx = tx / d; dz = tz / d;
-      }
-      dx += rand(-0.012, 0.012);
+      const dx = sy + rand(-0.012, 0.012), dz = cy;
       G.bullets.push({ x: clamp(mx / XS, -0.99, 0.99), y: my, z: mz, vx: dx * BULLET_SPEED / XS, vz: dz * BULLET_SPEED, dmg, life: RANGE / BULLET_SPEED });
       f.rec = 0.1;
       G.flashes.push({ x: mx, y: my, z: mz, yaw: Math.atan2(dx, dz), t: 0.05, big: 1 });
@@ -454,8 +449,8 @@
   function killFoe(e, z) {
     e.dead = true; G.kills++;
     puff(e.x, z, 0xff5a4a, e.elite ? 22 : 7, e.elite ? 2 : 1);
-    if (e.elite) { for (let k = 0; k < 5; k++) addCoins(20, e.x + rand(-0.15, 0.15), z + rand(-0.5, 0.5)); SFX.elite(); }
-    else addCoins(20, e.x, z);
+    if (e.elite) { for (let k = 0; k < 4; k++) addCoins(COIN.elite / 4, e.x + rand(-0.15, 0.15), z + rand(-0.5, 0.5)); SFX.elite(); }
+    else addCoins(COIN.foe, e.x, z);
     SFX.pop();
   }
 
@@ -463,11 +458,11 @@
     e.hp -= b.dmg; e.flash = 0.09;
     if (e.hp > 0) return;
     if (e.kind === 'foe') killFoe(e, z);
-    else if (e.kind === 'tire') { e.dead = true; puff(e.x, z, 0x3a3a3a, 18, 2); addCoins(60, e.x, z); SFX.tire(); }
+    else if (e.kind === 'tire') { e.dead = true; puff(e.x, z, 0x3a3a3a, 18, 2); addCoins(COIN.tire, e.x, z); SFX.tire(); }
     else if (e.kind === 'boss') {
       e.dead = true; G.wallDone = 0.001;
       puff(e.x, z, 0xff3030, 40, 4, 2); puff(e.x, z, 0xffd23a, 30, 3, 2.5); shake = 0.7; SFX.boom();
-      for (let k = 0; k < 16; k++) addCoins(40, e.x + rand(-0.3, 0.3), z + rand(-1.5, 1.5));
+      for (let k = 0; k < 10; k++) addCoins(COIN.boss * S.level / 10, e.x + rand(-0.3, 0.3), z + rand(-1.5, 1.5));
       for (const f of G.ents) if (f.kind !== 'boss' && !f.dead && f.kind !== 'gate') { f.dead = true; puff(f.x, f.z - G.dist, 0xff5a4a, 5); }
       floatText(0, z, 'BOSS DOWN!', '#ffe14a', 56, 3);
     }
@@ -551,11 +546,12 @@
           applyGate(seg.op === '?' ? seg.hide : seg);
         }
       } else if (e.kind === 'foe') {
-        // the horde holds behind its gate, then charges
+        // the horde holds in front of its gate, then charges straight down its lane
         if (!e.awake && z < (e.elite ? WAKE + 6 : WAKE)) e.awake = true;
+        z = e.z - G.dist;
         if (e.awake && G.n > 0) {
           e.z -= e.sp * dt; e.ph += dt * (e.elite ? 7 : 12);
-          e.x += clamp((G.x - e.x) * 3, -1, 1) * (e.elite ? 0.8 : 1.3) * dt;
+          if (z < LUNGE) e.x += clamp((G.x - e.x) * 3, -1, 1) * (e.elite ? 0.25 : 0.45) * dt;
         }
         z = e.z - G.dist;
         const reach = r + (e.elite ? 0.16 : 0.08);
@@ -588,7 +584,7 @@
     }
     targets.sort((a, b) => a.z - b.z);
     G.active = act; G.gateZ = gateZ;
-    G.targets = targets.filter((e) => e.awake);
+    G.targets = targets;
   }
 
   // At the end of the bridge the squad digs in and the boss walks at it,
@@ -603,7 +599,9 @@
     }
     if (!G.wall || G.wallDone || G.n <= 0) return;
     B.ph += dt * 4;
-    B.x = lerp(B.x, clamp(G.x, -0.55, 0.55), Math.min(1, dt * 0.6));
+    // he weaves across the bridge: keep him in your line of fire
+    B.weave = (B.weave || 0) + dt * (0.55 + S.level * 0.04);
+    B.x = Math.sin(B.weave) * 0.58;
     if (bz > 2.6) B.z -= (1.5 + S.level * 0.08) * dt;
     else {
       // in reach: he stomps the squad flat a few soldiers at a time
@@ -689,7 +687,7 @@
       G.wallDone += dt;
       if (G.wallDone > 1.6 && screen === 'play') {
         screen = 'win'; G.running = false; G.panel = 0;
-        const bonus = Math.round(200 * S.level * revenue());
+        const bonus = Math.round(COIN.clear * S.level * revenue());
         G.bonus = bonus; S.coins += bonus; S.earned += bonus; G.earned += bonus;
         G.cleared = S.level; S.level++;
         writeSave(); submitScore(); SFX.win();

@@ -19,11 +19,10 @@ you need them: each boss is much tougher than the last.
 | Buy an upgrade | Tap a card on the level screen |
 | Pause | Pause button, `Esc` or `P` |
 
-- **Shooting is automatic.** Every bullet leaves a real barrel: each shot
-  flashes at the muzzle, kicks that soldier back and flicks out a spent
-  casing. Bullets fly straight up your lane until enemies charge; then the
-  whole squad turns to face them and aims. A bullet that kills a soldier with
-  damage to spare carries the rest into the next one.
+- **Firing is automatic, aiming is you.** There is no auto-aim: every bullet
+  flies straight ahead from a soldier's own barrel (muzzle flash, recoil kick,
+  spent casing), so you steer the squad to line up your shots. A bullet that
+  kills a soldier with damage to spare carries the rest into the next one.
 - **Gates** change the squad when you run through them. Every bullet that
   touches a gate **stops there**.
   - **Number gates** (`-9`, `+3`) go up with every bullet you put into them,
@@ -33,15 +32,19 @@ you need them: each boss is much tougher than the last.
     mystery (×2, ÷2, a bonus or a loss), revealed only when you pass. They
     sit next to number gates, so you keep choosing between raising a gate
     yourself and taking the gamble.
-- **The horde** stands guard in front of each gate, then charges and homes in
-  on the squad. Every red soldier that reaches you takes one of yours.
+- **The horde** stands guard in front of each gate, then charges straight down
+  its lanes; only in the last few metres do they veer toward the squad. Put
+  the squad in front of them to mow them down, or slip past the edge of the
+  charge. Every red soldier that reaches you takes one of yours. Hordes are
+  smaller on the first two levels and grow from there.
 - **Elites** (big, dark red, with a health number) soak up bullets and take
   five soldiers with them.
 - **Tires** roll down a lane and flatten **every soldier in their path**:
   step the squad out of the way, or shoot them first. The rest of the squad
   closes ranks afterwards.
 - **Boss**: at the end of the bridge the squad stops and a horned giant with a
-  gun walks at it. He fires three-round bursts at where the squad is standing
+  gun walks at it, weaving from side to side, so you have to keep moving to
+  keep him in your line of fire. He fires three-round bursts at where the squad is standing
   (move to dodge them), calls in minions, rolls tires down your lane, and
   stomps soldiers once he reaches you. Kill him to clear the level. Lose every
   soldier and the run ends; you keep the coins you collected.
@@ -53,14 +56,30 @@ you need them: each boss is much tougher than the last.
 | **Fire Rate** | +12% shots per soldier |
 | **Damage** | +17% bullet damage, compounding |
 | **Revenue** | +25% coins |
-| **Squad** | +1 soldier at the start of every run |
+| **Squad** | +1 soldier at the start of every run (you start with 2) |
+
+### Coins
+
+Coins are scarce on purpose: 2 per soldier, 12 per elite, 8 per tire, 60 × level
+for the boss and 40 × level for clearing the level (all raised by Revenue).
+You keep what you collect even when you lose. A level pays for roughly one or
+two upgrades, and prices rise 36% per level of each card, so later levels are
+won by replaying earlier ones and choosing upgrades carefully.
+
+A simulated career with an autopilot that steers perfectly (lines up every
+shot, dodges every tire, but never the boss's bullets), spending everything on
+the cheapest of Fire Rate, Damage and Squad after each run, needed:
+
+| Level | 1–5 | 6 | 7–8 | 9 | 10 | 11 |
+|---|---|---|---|---|---|---|
+| Runs to clear | 1 each | 6 | 1 each | 7 | 5 | 21 |
+
+Real players will need more.
 
 Levels are built from their number, so a level plays the same on every retry.
 Each one is longer, with bigger hordes, more elites and tires, and a boss with
-far more health (about 9K on level 1, 33K on level 3, 115K on level 5).
-Simulated with perfect steering (but never dodging the boss's bullets):
-level 1 can be won with no upgrades, level 2 needs one level of Fire Rate and
-Damage, level 5 about four, level 7 about nine.
+far more health (about 7K on level 1, 25K on level 3, 80K on level 5). Hordes
+are smaller on the first two levels and grow from there.
 
 ### 3D Bitmoji
 

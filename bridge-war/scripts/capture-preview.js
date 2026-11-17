@@ -32,8 +32,15 @@ const fs = require('fs');
       const tire = act.find((e) => e.kind === 'tire' && !e.hitSquad && e.z - G.dist < 26 && Math.abs(e.x * 3 - G.x * 3) < R + 0.75);
       const gate = act.find((e) => e.kind === 'gate' && !e.used);
       const val = (s) => { const g = s.op === '?' ? { op: 'add', v: 0 } : s; return g.op === 'add' ? G.n + g.v : g.op === 'mul' ? Math.min(150, G.n * g.v) : Math.ceil(G.n / g.v); };
+      const foes = act.filter((e) => e.kind === 'foe' && e.z - G.dist < 30);
       if (tire) tx = tire.x > 0.1 ? tire.x - 0.75 : tire.x < -0.1 ? tire.x + 0.75 : 0.75;
-      else if (gate) {
+      else if (G.wall && G.boss && !G.boss.dead) tx = G.boss.x + Math.cos(G.boss.weave || 0) * 0.08;
+      else if (foes.length && !(gate && gate.z - G.dist < 18)) {
+        // no auto-aim: line up with the thickest, nearest part of the charge
+        let best = G.x, bs = -1;
+        for (let c = -0.9; c <= 0.9; c += 0.1) { let sc = 0; for (const e of foes) if (Math.abs(e.x - c) < 0.22) sc += 30 - (e.z - G.dist); if (sc > bs) { bs = sc; best = c; } }
+        tx = best;
+      } else if (gate) {
         const best = want && gate === want.gate ? want.seg : gate.segs.reduce((a, s) => (val(s) > val(a) ? s : a));
         tx = (best.x1 + best.x2) / 2;
       }
